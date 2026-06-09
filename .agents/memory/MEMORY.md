@@ -1,0 +1,1 @@
+- [Tailwind 4 dark theme CSS vars](tailwind4-dark-theme.md) — hsl(var(--x)) @theme inline pattern doesn't apply bg at runtime; use direct hsl() values in @layer base instead.

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Nexa Payment Crypto"
+version = "1.0.0"
+id = "artifacts/nexa-app"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23215
+
+[services.development]
+run = "pnpm --filter @workspace/nexa-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nexa-app", "run", "build" ]
+publicDir = "artifacts/nexa-app/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23215"
+BASE_PATH = "/"

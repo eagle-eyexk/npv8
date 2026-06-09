@@ -1,22 +1,32 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Nexa Payment Crypto API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: wallet
+    description: Wallet operations
+  - name: transactions
+    description: Transaction operations
+  - name: merchants
+    description: Merchant operations
+  - name: tap
+    description: Tap-to-pay operations
+  - name: card
+    description: Debit card operations
+  - name: dashboard
+    description: Dashboard aggregates
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +34,528 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /wallet:
+    get:
+      operationId: getWallet
+      tags: [wallet]
+      summary: Get wallet info and balance
+      responses:
+        "200":
+          description: Wallet info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+
+  /transactions:
+    get:
+      operationId: listTransactions
+      tags: [transactions]
+      summary: List all transactions
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [send, receive, tap_pay, card_spend]
+      responses:
+        "200":
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+    post:
+      operationId: createTransaction
+      tags: [transactions]
+      summary: Send NEXA to an address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionInput"
+      responses:
+        "201":
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /transactions/{id}:
+    get:
+      operationId: getTransaction
+      tags: [transactions]
+      summary: Get a single transaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Transaction detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /merchants:
+    get:
+      operationId: listMerchants
+      tags: [merchants]
+      summary: List all merchants
+      responses:
+        "200":
+          description: List of merchants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Merchant"
+    post:
+      operationId: createMerchant
+      tags: [merchants]
+      summary: Register a new merchant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantInput"
+      responses:
+        "201":
+          description: Merchant created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Merchant"
+
+  /merchants/{id}:
+    get:
+      operationId: getMerchant
+      tags: [merchants]
+      summary: Get a single merchant
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Merchant detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Merchant"
+    patch:
+      operationId: updateMerchant
+      tags: [merchants]
+      summary: Update a merchant
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantUpdate"
+      responses:
+        "200":
+          description: Updated merchant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Merchant"
+
+  /tap/claim:
+    post:
+      operationId: claimTapPayment
+      tags: [tap]
+      summary: Merchant claims a tap-to-pay payment token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TapClaimInput"
+      responses:
+        "200":
+          description: Payment result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TapResult"
+
+  /tap/generate:
+    post:
+      operationId: generateTapToken
+      tags: [tap]
+      summary: User generates a tap-to-pay token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TapTokenInput"
+      responses:
+        "201":
+          description: Tap token generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TapToken"
+
+  /card:
+    get:
+      operationId: getCard
+      tags: [card]
+      summary: Get linked debit card info
+      responses:
+        "200":
+          description: Card info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+
+  /card/spend:
+    get:
+      operationId: listCardSpend
+      tags: [card]
+      summary: List card spend transactions
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Card spend list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CardSpend"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent activity feed
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /dashboard/volume:
+    get:
+      operationId: getVolumeChart
+      tags: [dashboard]
+      summary: Get 30-day transaction volume chart data
+      responses:
+        "200":
+          description: Volume data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VolumePoint"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    Wallet:
+      type: object
+      required: [id, address, balanceNexa, balanceUsd, kycStatus]
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+        balanceNexa:
+          type: number
+        balanceUsd:
+          type: number
+        kycStatus:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt:
+          type: string
+
+    Transaction:
+      type: object
+      required: [id, type, amount, amountUsd, status, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [send, receive, tap_pay, card_spend]
+        amount:
+          type: number
+        amountUsd:
+          type: number
+        fromAddress:
+          type: ["string", "null"]
+        toAddress:
+          type: ["string", "null"]
+        merchantName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, confirmed, failed]
+        txHash:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    TransactionInput:
+      type: object
+      required: [toAddress, amount]
+      properties:
+        toAddress:
+          type: string
+        amount:
+          type: number
+        memo:
+          type: string
+
+    Merchant:
+      type: object
+      required: [id, businessName, settlementAddress, category, totalVolume, isActive]
+      properties:
+        id:
+          type: string
+        businessName:
+          type: string
+        settlementAddress:
+          type: string
+        category:
+          type: string
+        totalVolume:
+          type: number
+        transactionCount:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    MerchantInput:
+      type: object
+      required: [businessName, settlementAddress, category]
+      properties:
+        businessName:
+          type: string
+        settlementAddress:
+          type: string
+        category:
+          type: string
+
+    MerchantUpdate:
+      type: object
+      properties:
+        businessName:
+          type: string
+        category:
+          type: string
+        isActive:
+          type: boolean
+
+    TapClaimInput:
+      type: object
+      required: [userPubkey, amount, merchantId, nonce, expiry, signature]
+      properties:
+        userPubkey:
+          type: string
+        amount:
+          type: number
+        merchantId:
+          type: string
+        nonce:
+          type: integer
+        expiry:
+          type: string
+        signature:
+          type: string
+
+    TapResult:
+      type: object
+      required: [status, txHash]
+      properties:
+        status:
+          type: string
+          enum: [success, already_processed, failed]
+        txHash:
+          type: ["string", "null"]
+        amount:
+          type: number
+
+    TapTokenInput:
+      type: object
+      required: [amount, merchantId]
+      properties:
+        amount:
+          type: number
+        merchantId:
+          type: string
+
+    TapToken:
+      type: object
+      required: [token, expiresAt, nonce]
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+        nonce:
+          type: integer
+        amount:
+          type: number
+
+    Card:
+      type: object
+      required: [id, last4, network, status, spendLimitUsd, availableUsd]
+      properties:
+        id:
+          type: string
+        last4:
+          type: string
+        network:
+          type: string
+        status:
+          type: string
+          enum: [active, frozen, pending]
+        spendLimitUsd:
+          type: number
+        availableUsd:
+          type: number
+        expiryMonth:
+          type: integer
+        expiryYear:
+          type: integer
+
+    CardSpend:
+      type: object
+      required: [id, merchantName, amountUsd, category, createdAt]
+      properties:
+        id:
+          type: string
+        merchantName:
+          type: string
+        amountUsd:
+          type: number
+        category:
+          type: string
+        status:
+          type: string
+          enum: [pending, cleared, declined]
+        createdAt:
+          type: string
+
+    DashboardSummary:
+      type: object
+      required: [balanceNexa, balanceUsd, totalSent, totalReceived, totalTapPay, totalCardSpend, nexaPriceUsd, priceChange24h]
+      properties:
+        balanceNexa:
+          type: number
+        balanceUsd:
+          type: number
+        totalSent:
+          type: number
+        totalReceived:
+          type: number
+        totalTapPay:
+          type: number
+        totalCardSpend:
+          type: number
+        nexaPriceUsd:
+          type: number
+        priceChange24h:
+          type: number
+        activeMerchants:
+          type: integer
+        transactionCount:
+          type: integer
+
+    ActivityItem:
+      type: object
+      required: [id, type, description, amount, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [send, receive, tap_pay, card_spend, kyc_approved]
+        description:
+          type: string
+        amount:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+
+    VolumePoint:
+      type: object
+      required: [date, volume, txCount]
+      properties:
+        date:
+          type: string
+        volume:
+          type: number
+        txCount:
+          type: integer
