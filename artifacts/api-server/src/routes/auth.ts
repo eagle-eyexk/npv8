@@ -8,22 +8,45 @@ import crypto from "crypto";
 
 const router = Router();
 
-const NEXA_PRICE_EUR = 100;
-const EUR_TO_USD = 1.08;
+export const NEXA_PRICE_EUR = 100;
+export const EUR_TO_USD = 1.08;
 export const NEXA_PRICE_USD = NEXA_PRICE_EUR * EUR_TO_USD;
+
+const PHRASE_WORDS = [
+  "access","adapt","agent","alpha","anchor","arctic","array","asset",
+  "beacon","binary","blade","blend","bloom","board","bright","build",
+  "cache","carry","chart","circle","claim","clean","cloud","code",
+  "connect","coral","core","craft","credit","crest","crisp","cross",
+  "data","delta","design","digit","direct","dome","draft","drive",
+  "echo","edge","ember","encode","entry","epoch","equal","event",
+  "field","filter","final","first","flash","float","focus","forge",
+  "frame","fresh","frost","fuel","fusion","globe","grant","graph",
+  "green","grid","group","guard","guide","hash","haven","heal",
+  "helix","image","index","inner","input","layer","light","limit",
+  "link","logic","lunar","merge","mesh","mint","model","nexus",
+  "north","occur","omega","open","orbit","order","parse","patch",
+  "phase","pivot","pixel","plain","point","power","prime","proof",
+  "proxy","pulse","quest","raise","reach","realm","relay","reset",
+  "route","scale","scout","seal","share","shift","sigma","smart",
+  "solid","space","spark","speed","stack","store","storm","trust",
+];
 
 function generateAddress(): string {
   return "nexa1" + crypto.randomBytes(20).toString("hex");
 }
 
-// POST /auth/register
+function generateRecoveryPhrase(): string {
+  const bytes = crypto.randomBytes(12);
+  return Array.from(bytes).map(b => PHRASE_WORDS[b % PHRASE_WORDS.length]).join(" ");
+}
+
 router.post("/auth/register", async (req, res) => {
   try {
     const { email, password, fullName, role = "user" } = req.body;
-    if (!email || !password || !fullName) {
+    if (!email || !password || !fullName)
       return res.status(400).json({ error: "email, password and fullName are required" });
-    }
-    if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    if (password.length < 6)
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
 
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
     if (existing) return res.status(409).json({ error: "Email already registered" });
@@ -37,15 +60,18 @@ router.post("/auth/register", async (req, res) => {
     }).returning();
 
     const address = generateAddress();
-    const startNexa = role === "merchant" ? "5.00000000" : "10.00000000";
+    const recoveryPhrase = generateRecoveryPhrase();
+    const recoveryPhraseHash = await bcrypt.hash(recoveryPhrase, 10);
+
     const [wallet] = await db.insert(walletsTable).values({
       userId: user.id,
       address,
-      balanceNexa: startNexa,
-      balanceBtc: "0.00100000",
-      balanceEth: "0.05000000",
-      balanceUsdt: "108.00000000",
-      balanceUsd: String((parseFloat(startNexa) * NEXA_PRICE_USD).toFixed(4)),
+      balanceNexa: "0.00000000",
+      balanceBtc: "0.00000000",
+      balanceEth: "0.00000000",
+      balanceUsdt: "0.00000000",
+      balanceUsd: "0",
+      recoveryPhraseHash,
     }).returning();
 
     let merchant = null;
@@ -66,8 +92,8 @@ router.post("/auth/register", async (req, res) => {
       last4,
       network: "Visa",
       status: "active",
-      spendLimitUsd: String((parseFloat(startNexa) * NEXA_PRICE_USD).toFixed(4)),
-      availableUsd: String((parseFloat(startNexa) * NEXA_PRICE_USD).toFixed(4)),
+      spendLimitUsd: "0",
+      availableUsd: "0",
       expiryMonth: 12,
       expiryYear: 2028,
     });
@@ -78,6 +104,7 @@ router.post("/auth/register", async (req, res) => {
       user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
       wallet: { id: wallet.id, address: wallet.address },
       merchant: merchant ? { id: merchant.id, businessName: merchant.businessName } : null,
+      recoveryPhrase,
     });
   } catch (err) {
     console.error("register error:", err);
@@ -85,7 +112,6 @@ router.post("/auth/register", async (req, res) => {
   }
 });
 
-// POST /auth/login
 router.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -93,7 +119,6 @@ router.post("/auth/login", async (req, res) => {
 
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
-
     if (user.isFrozen === "true") return res.status(403).json({ error: "Account is frozen. Contact support." });
 
     const valid = await bcrypt.compare(password, user.passwordHash);
@@ -121,7 +146,6 @@ router.post("/auth/login", async (req, res) => {
   }
 });
 
-// GET /auth/me
 router.get("/auth/me", requireAuth, async (req, res) => {
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId));
@@ -139,12 +163,11 @@ router.get("/auth/me", requireAuth, async (req, res) => {
       wallet: { id: wallet.id, address: wallet.address },
       merchantId,
     });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// POST /auth/admin/login
 router.post("/auth/admin/login", async (req, res) => {
   const { username, password } = req.body;
   if (username === "root" && password === "Jari!!2018") {

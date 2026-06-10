@@ -2,7 +2,6 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/Layout";
-import NetworkBackground from "@/components/NetworkBackground";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
@@ -17,75 +16,45 @@ import Admin from "@/pages/Admin";
 import MerchantDashboard from "@/pages/MerchantDashboard";
 import NotFound from "@/pages/not-found";
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
-});
+const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } });
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function Guard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div className="spinner" style={{ width: 32, height: 32 }} />
-    </div>
-  );
+  if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><div className="spin" style={{ width: 32, height: 32 }} /></div>;
   if (!user) return <Redirect to="/login" />;
   return <>{children}</>;
 }
 
-function AppRoutes() {
+function Routes() {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div className="spinner" style={{ width: 32, height: 32 }} />
-    </div>
-  );
-
+  if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><div className="spin" style={{ width: 32, height: 32 }} /></div>;
   return (
     <Switch>
       <Route path="/">{user ? <Redirect to="/dashboard" /> : <Landing />}</Route>
       <Route path="/login">{user ? <Redirect to="/dashboard" /> : <Login />}</Route>
       <Route path="/register">{user ? <Redirect to="/dashboard" /> : <Register />}</Route>
       <Route path="/admin"><Admin /></Route>
-      <Route path="/dashboard">
-        <ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>
-      </Route>
-      <Route path="/send">
-        <ProtectedRoute><Layout><Send /></Layout></ProtectedRoute>
-      </Route>
-      <Route path="/receive">
-        <ProtectedRoute><Layout><Receive /></Layout></ProtectedRoute>
-      </Route>
-      <Route path="/transactions">
-        <ProtectedRoute><Layout><Transactions /></Layout></ProtectedRoute>
-      </Route>
-      <Route path="/tap">
-        <ProtectedRoute><Layout><Tap /></Layout></ProtectedRoute>
-      </Route>
-      <Route path="/merchants">
-        <ProtectedRoute><Layout><Merchants /></Layout></ProtectedRoute>
-      </Route>
-      <Route path="/card">
-        <ProtectedRoute><Layout><Card /></Layout></ProtectedRoute>
-      </Route>
-      <Route path="/merchant-pos">
-        <ProtectedRoute><Layout><MerchantDashboard /></Layout></ProtectedRoute>
-      </Route>
+      <Route path="/dashboard"><Guard><Layout><Dashboard /></Layout></Guard></Route>
+      <Route path="/send"><Guard><Layout><Send /></Layout></Guard></Route>
+      <Route path="/receive"><Guard><Layout><Receive /></Layout></Guard></Route>
+      <Route path="/transactions"><Guard><Layout><Transactions /></Layout></Guard></Route>
+      <Route path="/tap"><Guard><Layout><Tap /></Layout></Guard></Route>
+      <Route path="/merchants"><Guard><Layout><Merchants /></Layout></Guard></Route>
+      <Route path="/card"><Guard><Layout><Card /></Layout></Guard></Route>
+      <Route path="/merchant-pos"><Guard><Layout><MerchantDashboard /></Layout></Guard></Route>
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function App() {
+export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={qc}>
       <AuthProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <NetworkBackground />
-          <AppRoutes />
+          <Routes />
         </WouterRouter>
       </AuthProvider>
     </QueryClientProvider>
   );
 }
-
-export default App;

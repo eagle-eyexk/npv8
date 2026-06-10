@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-
 const API = import.meta.env.BASE_URL.replace(/\/$/, "");
-function tok() { return localStorage.getItem("nexa_token") ?? ""; }
+const tok = () => localStorage.getItem("nexa_token") ?? "";
 
 export default function Tap() {
   const [merchants, setMerchants] = useState<any[]>([]);
@@ -16,13 +15,12 @@ export default function Tap() {
       .then(r => r.json()).then(d => setMerchants(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
-  async function handleTap() {
+  async function pay() {
     if (!selected || !amount) return;
     setError(""); setLoading(true);
     try {
       const r = await fetch(`${API}/api/tap/quick`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${tok()}`, "Content-Type": "application/json" },
+        method: "POST", headers: { Authorization: `Bearer ${tok()}`, "Content-Type": "application/json" },
         body: JSON.stringify({ amount: parseFloat(amount), merchantId: selected.id }),
       });
       const d = await r.json();
@@ -33,69 +31,85 @@ export default function Tap() {
   }
 
   if (success) return (
-    <div className="content-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "70vh" }}>
-      <div className="glass-card anim-in" style={{ padding: 36, textAlign: "center", maxWidth: 360 }}>
-        <div style={{ fontSize: 56, marginBottom: 16 }}>⚡</div>
-        <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 22, marginBottom: 8 }}>Payment Sent!</h3>
-        <div style={{ fontWeight: 700, fontSize: 28, color: "var(--primary)", marginBottom: 4 }}>{success.amount} NEXA</div>
-        <div className="text-muted">€{(success.amount * 100).toFixed(2)} · {success.merchant}</div>
-        <div className="mono text-xs text-muted mt-12" style={{ wordBreak: "break-all" }}>{success.txHash}</div>
+    <div className="pg in" style={{ paddingTop: 40, display: "flex", flexDirection: "column", alignItems: "center", minHeight: "60vh", justifyContent: "center" }}>
+      <div className="card card-p tc" style={{ maxWidth: 360, width: "100%" }}>
+        <div style={{ width: 80, height: 80, borderRadius: "50%", background: "var(--success-bg)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 40 }}>✅</div>
+        <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Payment Successful</h2>
+        <div style={{ fontWeight: 800, fontSize: 32, color: "var(--primary)", marginBottom: 4 }}>{success.amount} NEXA</div>
+        <div className="muted">€{(success.amount * 100).toFixed(2)} · {success.merchant}</div>
+        <div className="mono xs muted mt-12" style={{ wordBreak: "break-all", background: "var(--bg)", padding: "8px 12px", borderRadius: 8 }}>{success.txHash}</div>
         <button className="btn btn-primary w-full mt-20" onClick={() => setSuccess(null)}>Done</button>
       </div>
     </div>
   );
 
   return (
-    <div className="content-wrap">
-      <div style={{ padding: "24px 0 20px" }} className="anim-up">
-        <h2 className="page-title">⚡ Tap to Pay</h2>
-        <div className="text-sm text-muted mt-4">Instant NEXA payments</div>
+    <div className="pg" style={{ paddingTop: 20 }}>
+      <div className="up mb-20">
+        <h2 style={{ fontWeight: 800, fontSize: 22 }}>Tap to Pay</h2>
+        <div className="muted sm mt-4">Hold your phone near the merchant device</div>
       </div>
 
-      {/* Select merchant */}
-      <div className="anim-up anim-delay-1" style={{ marginBottom: 20 }}>
-        <div className="text-sm" style={{ fontWeight: 600, marginBottom: 10 }}>Select Merchant</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {!merchants.length ? (
-            <div className="glass-card" style={{ padding: 16, textAlign: "center", color: "var(--text-muted)" }}>No merchants available</div>
-          ) : merchants.map(m => (
-            <div key={m.id} onClick={() => setSelected(m)}
-              className="glass-card" style={{ padding: "14px 16px", cursor: "pointer", border: selected?.id === m.id ? "2px solid var(--primary)" : "1.5px solid var(--glass-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{m.businessName}</div>
-                <div className="text-xs text-muted">{m.category}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 12, color: "var(--accent)" }}>{m.transactionCount} txns</div>
-                {selected?.id === m.id && <span className="badge-neon badge-blue" style={{ fontSize: 10 }}>Selected</span>}
-              </div>
+      {/* Merchant select */}
+      <div className="up d1 mb-16">
+        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Select Merchant</div>
+        {!merchants.length ? (
+          <div className="card card-p tc muted sm">No merchants available</div>
+        ) : merchants.map(m => (
+          <div key={m.id} onClick={() => setSelected(m)} className="card" style={{ padding: "14px 16px", marginBottom: 8, cursor: "pointer", border: selected?.id === m.id ? "2px solid var(--primary)" : "1px solid var(--border)", background: selected?.id === m.id ? "var(--primary-light)" : "#fff", transition: "all 0.15s", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{m.businessName}</div>
+              <div className="xs muted mt-4">{m.category} · {m.transactionCount} transactions</div>
             </div>
-          ))}
-        </div>
+            {selected?.id === m.id && <span className="bdg bdg-blue">Selected</span>}
+          </div>
+        ))}
       </div>
 
-      {/* Amount + Tap */}
       {selected && (
-        <div className="anim-up anim-delay-2" style={{ marginBottom: 20 }}>
-          <div className="input-wrap" style={{ marginBottom: 16 }}>
-            <label className="input-label">Amount (NEXA)</label>
-            <input className="input-field" type="number" step="0.000001" min="0.000001" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
-            {amount && <div className="text-sm text-muted mt-4">≈ <strong style={{ color: "var(--accent)" }}>€{(parseFloat(amount || "0") * 100).toFixed(2)}</strong></div>}
+        <div className="up d2">
+          <div className="inp-group mb-20">
+            <label className="inp-label">Amount (NEXA)</label>
+            <input className="inp" type="number" step="0.000001" min="0.000001" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} style={{ fontSize: 24, fontWeight: 700, height: 60, textAlign: "center" }} />
+            {amount && parseFloat(amount) > 0 && (
+              <div className="tc sm" style={{ marginTop: 6, color: "var(--success)", fontWeight: 600 }}>
+                ≈ €{(parseFloat(amount) * 100).toFixed(2)}
+              </div>
+            )}
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-            <button className="tap-ring" onClick={handleTap} disabled={loading || !amount}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 20 }}>
+            <button className="tap-ring" onClick={pay} disabled={loading || !amount || parseFloat(amount) <= 0}>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 32 }}>{loading ? "⏳" : "⚡"}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primary)", marginTop: 6 }}>{loading ? "Sending…" : "TAP"}</div>
+                <div style={{ fontSize: 40, color: "var(--primary)" }}>{loading ? "⏳" : "📲"}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: "var(--primary)", marginTop: 6 }}>
+                  {loading ? "Processing…" : "TAP TO PAY"}
+                </div>
               </div>
             </button>
-            <div className="text-sm text-muted">Tap to pay {selected.businessName}</div>
+            <div className="muted sm">Tap to pay {selected.businessName}</div>
+          </div>
+
+          {/* How it works */}
+          <div className="card card-p">
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>How it Works</div>
+            <div style={{ display: "flex", gap: 16, overflowX: "auto" }}>
+              {[
+                { icon: "🏪", label: "Merchant enters amount" },
+                { icon: "📲", label: "Customer taps phone" },
+                { icon: "🔐", label: "Secure verification" },
+                { icon: "✅", label: "Instant settlement" },
+              ].map((s, i) => (
+                <div key={s.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flexShrink: 0, width: 80 }}>
+                  <div style={{ fontSize: 24 }}>{s.icon}</div>
+                  <div style={{ fontSize: 10, textAlign: "center", color: "var(--text-muted)", lineHeight: 1.4 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
-
-      {error && <div className="form-error">{error}</div>}
+      {error && <div className="form-err mt-12">{error}</div>}
     </div>
   );
 }
