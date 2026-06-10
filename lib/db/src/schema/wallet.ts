@@ -15,6 +15,7 @@ export const walletsTable = pgTable("wallets", {
   balanceUsdt: numeric("balance_usdt", { precision: 30, scale: 8 }).notNull().default("84.20000000"),
   balanceUsd: numeric("balance_usd", { precision: 20, scale: 4 }).notNull().default("0"),
   kycStatus: kycStatusEnum("kyc_status").notNull().default("approved"),
+  lastMiningAt: timestamp("last_mining_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

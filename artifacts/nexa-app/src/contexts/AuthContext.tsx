@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import { setAuthTokenGetter } from "@workspace/api-client-react";
 
 const API = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -39,7 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    setAuthTokenGetter(() => localStorage.getItem("nexa_token"));
     const token = localStorage.getItem("nexa_token");
     if (token) {
       fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })

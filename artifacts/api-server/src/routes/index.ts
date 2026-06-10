@@ -9,6 +9,7 @@ import cardRouter from "./card";
 import dashboardRouter from "./dashboard";
 import miningRouter from "./mining";
 import adminRouter from "./admin";
+import pricesRouter from "./prices";
 
 const router = Router();
 
@@ -22,5 +23,6 @@ router.use(cardRouter);
 router.use(dashboardRouter);
 router.use(miningRouter);
 router.use(adminRouter);
+router.use(pricesRouter);
 
 export default router;

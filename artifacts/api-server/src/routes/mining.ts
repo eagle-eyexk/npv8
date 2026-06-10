@@ -7,25 +7,30 @@ import { NEXA_PRICE_USD } from "./auth";
 
 const router = Router();
 
-const MINING_REWARD = 0.0001; // NEXA per claim
-const MIN_INTERVAL_MS = 25000; // 25 seconds minimum between claims
-const lastClaim = new Map<string, number>();
+const MINING_REWARD = 0.0001;
+const MIN_INTERVAL_MS = 25000;
 
 router.post("/mining/claim", requireAuth, async (req, res) => {
   try {
     const walletId = req.user!.walletId;
-    const now = Date.now();
-    const last = lastClaim.get(walletId) ?? 0;
-    if (now - last < MIN_INTERVAL_MS) {
-      return res.status(429).json({ error: "Too fast — wait before next claim", retryAfter: Math.ceil((MIN_INTERVAL_MS - (now - last)) / 1000) });
-    }
-    lastClaim.set(walletId, now);
-
     const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
     if (!wallet) return res.status(404).json({ error: "Wallet not found" });
 
+    const now = new Date();
+    const last = wallet.lastMiningAt ? new Date(wallet.lastMiningAt).getTime() : 0;
+    const elapsed = now.getTime() - last;
+
+    if (elapsed < MIN_INTERVAL_MS) {
+      return res.status(429).json({
+        error: "Too fast — wait before next claim",
+        retryAfter: Math.ceil((MIN_INTERVAL_MS - elapsed) / 1000),
+      });
+    }
+
     const newBalance = (parseFloat(wallet.balanceNexa) + MINING_REWARD).toFixed(8);
-    await db.update(walletsTable).set({ balanceNexa: newBalance }).where(eq(walletsTable.id, walletId));
+    await db.update(walletsTable)
+      .set({ balanceNexa: newBalance, lastMiningAt: now })
+      .where(eq(walletsTable.id, walletId));
 
     await db.insert(transactionsTable).values({
       walletId,
@@ -36,7 +41,7 @@ router.post("/mining/claim", requireAuth, async (req, res) => {
       toAddress: wallet.address,
       merchantName: "Nexa Mining Pool",
       status: "confirmed",
-      txHash: "0xmine" + Date.now().toString(16),
+      txHash: "0xmine" + now.getTime().toString(16),
     });
 
     return res.json({
@@ -44,20 +49,27 @@ router.post("/mining/claim", requireAuth, async (req, res) => {
       rewardEur: MINING_REWARD * 100,
       newBalance: parseFloat(newBalance),
     });
-  } catch { return res.status(500).json({ error: "Internal server error" }); }
+  } catch {
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.get("/mining/stats", requireAuth, async (req, res) => {
   try {
-    const walletId = req.user!.walletId;
-    const last = lastClaim.get(walletId);
+    const [wallet] = await db.select({ lastMiningAt: walletsTable.lastMiningAt })
+      .from(walletsTable).where(eq(walletsTable.id, req.user!.walletId));
+    const last = wallet?.lastMiningAt ? new Date(wallet.lastMiningAt).getTime() : null;
+    const elapsed = last ? Date.now() - last : null;
     return res.json({
-      active: !!last && Date.now() - last < 60000,
+      active: elapsed !== null && elapsed < 60000,
       rewardPerClaim: MINING_REWARD,
       rewardPerClaimEur: MINING_REWARD * 100,
       lastClaim: last ? new Date(last).toISOString() : null,
+      nextClaimInMs: elapsed !== null ? Math.max(0, MIN_INTERVAL_MS - elapsed) : 0,
     });
-  } catch { return res.status(500).json({ error: "Internal server error" }); }
+  } catch {
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 export default router;
