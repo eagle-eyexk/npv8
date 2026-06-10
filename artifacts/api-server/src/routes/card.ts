@@ -1,48 +1,47 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { cardsTable, cardSpendTable } from "@workspace/db";
-import { ListCardSpendQueryParams } from "@workspace/api-zod";
-import { desc } from "drizzle-orm";
+import { cardsTable, cardSpendTable, walletsTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
-// GET /card
-router.get("/card", async (req, res) => {
+router.get("/card", requireAuth, async (req, res) => {
   try {
-    const cards = await db.select().from(cardsTable).limit(1);
-    if (!cards.length) return res.status(404).json({ error: "No card found" });
-    const c = cards[0];
-    res.json({
-      id: c.id,
-      last4: c.last4,
-      network: c.network,
-      status: c.status,
-      spendLimitUsd: parseFloat(c.spendLimitUsd),
-      availableUsd: parseFloat(c.availableUsd),
-      expiryMonth: c.expiryMonth,
-      expiryYear: c.expiryYear,
+    const [card] = await db.select().from(cardsTable).where(eq(cardsTable.walletId, req.user!.walletId));
+    if (!card) return res.status(404).json({ error: "No card found" });
+
+    const spends = await db.select().from(cardSpendTable).where(eq(cardSpendTable.cardId, card.id))
+      .orderBy(desc(cardSpendTable.createdAt)).limit(20);
+
+    return res.json({
+      id: card.id,
+      last4: card.last4,
+      network: card.network,
+      status: card.status,
+      spendLimitUsd: parseFloat(card.spendLimitUsd),
+      availableUsd: parseFloat(card.availableUsd),
+      expiryMonth: card.expiryMonth,
+      expiryYear: card.expiryYear,
+      spendHistory: spends.map(s => ({
+        id: s.id, merchantName: s.merchantName, amountUsd: parseFloat(s.amountUsd),
+        category: s.category, status: s.status, createdAt: s.createdAt,
+      })),
     });
-  } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
+  } catch {
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// GET /card/spend
-router.get("/card/spend", async (req, res) => {
+router.post("/card/freeze", requireAuth, async (req, res) => {
   try {
-    const parsed = ListCardSpendQueryParams.safeParse(req.query);
-    const limit = parsed.success ? (parsed.data.limit ?? 10) : 10;
-    const rows = await db.select().from(cardSpendTable).orderBy(desc(cardSpendTable.createdAt)).limit(limit);
-    res.json(rows.map((s) => ({
-      id: s.id,
-      merchantName: s.merchantName,
-      amountUsd: parseFloat(s.amountUsd),
-      category: s.category,
-      status: s.status,
-      createdAt: s.createdAt,
-    })));
-  } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
+    const [card] = await db.select().from(cardsTable).where(eq(cardsTable.walletId, req.user!.walletId));
+    if (!card) return res.status(404).json({ error: "No card found" });
+    const newStatus = card.status === "frozen" ? "active" : "frozen";
+    await db.update(cardsTable).set({ status: newStatus as any }).where(eq(cardsTable.id, card.id));
+    return res.json({ status: newStatus });
+  } catch {
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 

@@ -1,115 +1,78 @@
-import { useState } from "react";
-import { useListTransactions } from "@workspace/api-client-react";
-import { ArrowUpRight, ArrowDownLeft, Zap, CreditCard, ExternalLink } from "lucide-react";
-import { format } from "date-fns";
+import { useState, useEffect } from "react";
 
-type TxType = "send" | "receive" | "tap_pay" | "card_spend" | undefined;
+const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+function tok() { return localStorage.getItem("nexa_token") ?? ""; }
 
-const filters: { label: string; value: TxType }[] = [
-  { label: "All", value: undefined },
-  { label: "Send", value: "send" },
-  { label: "Receive", value: "receive" },
-  { label: "Tap Pay", value: "tap_pay" },
-  { label: "Card", value: "card_spend" },
-];
+const TX_META: Record<string, { icon: string; label: string; bg: string; color: string }> = {
+  send: { icon: "↑", label: "Sent", bg: "rgba(239,68,68,0.1)", color: "#EF4444" },
+  receive: { icon: "↓", label: "Received", bg: "rgba(16,185,129,0.1)", color: "#10B981" },
+  tap_pay: { icon: "⚡", label: "Tap Pay", bg: "rgba(14,165,233,0.1)", color: "#0EA5E9" },
+  card_spend: { icon: "💳", label: "Card", bg: "rgba(139,92,246,0.1)", color: "#8B5CF6" },
+  mining: { icon: "⛏️", label: "Mining", bg: "rgba(245,158,11,0.1)", color: "#F59E0B" },
+};
 
-function txIcon(type: string) {
-  switch (type) {
-    case "send": return <ArrowUpRight size={15} className="text-orange-400" />;
-    case "receive": return <ArrowDownLeft size={15} className="text-emerald-400" />;
-    case "tap_pay": return <Zap size={15} className="text-primary" />;
-    case "card_spend": return <CreditCard size={15} className="text-violet-400" />;
-    default: return null;
-  }
-}
-
-function statusBadge(status: string) {
-  const styles: Record<string, string> = {
-    confirmed: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    pending: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    failed: "bg-red-500/10 text-red-400 border-red-500/20",
-    cleared: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  };
-  return (
-    <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize font-medium ${styles[status] ?? "bg-muted text-muted-foreground border-border"}`}>
-      {status}
-    </span>
-  );
-}
+const FILTERS = ["all", "send", "receive", "tap_pay", "mining"];
 
 export default function Transactions() {
-  const [activeType, setActiveType] = useState<TxType>(undefined);
-  const { data: txs, isLoading } = useListTransactions(activeType ? { type: activeType, limit: 50 } : { limit: 50 });
+  const [txs, setTxs] = useState<any[]>([]);
+  const [filter, setFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const q = filter !== "all" ? `?type=${filter}` : "";
+    fetch(`${API}/api/transactions${q}&limit=50`, { headers: { Authorization: `Bearer ${tok()}` } })
+      .then(r => r.json()).then(d => { setTxs(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [filter]);
 
   return (
-    <div className="p-6 space-y-5 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold">Transactions</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Full history of your NEXA activity</p>
+    <div className="content-wrap">
+      <div style={{ padding: "24px 0 16px" }} className="anim-up">
+        <h2 className="page-title">Transaction History</h2>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
-        {filters.map((f) => (
-          <button
-            key={String(f.value)}
-            onClick={() => setActiveType(f.value)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              activeType === f.value
-                ? "bg-primary text-primary-foreground"
-                : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
-            }`}
-          >
-            {f.label}
+      <div className="anim-up anim-delay-1" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 16 }}>
+        {FILTERS.map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`btn ${filter === f ? "btn-primary" : "btn-secondary"}`}
+            style={{ padding: "7px 16px", fontSize: 12, borderRadius: 999, whiteSpace: "nowrap", flexShrink: 0 }}>
+            {f === "all" ? "All" : TX_META[f]?.label ?? f}
           </button>
         ))}
       </div>
 
-      {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 px-5 py-2.5 text-xs text-muted-foreground uppercase tracking-wider border-b border-border">
-          <span>Type</span>
-          <span>Details</span>
-          <span className="text-right">Amount</span>
-          <span className="text-right">USD</span>
-          <span className="text-right">Status</span>
-        </div>
-
-        <div className="divide-y divide-border">
-          {isLoading ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 px-5 py-3.5 items-center">
-                <div className="w-7 h-7 rounded-full bg-muted animate-pulse" />
-                <div className="space-y-1.5">
-                  <div className="h-3 w-40 bg-muted animate-pulse rounded" />
-                  <div className="h-2.5 w-24 bg-muted animate-pulse rounded" />
+      <div className="anim-up anim-delay-2 glass-card" style={{ padding: "0 16px" }}>
+        {loading ? (
+          <div style={{ padding: "32px 0", display: "flex", justifyContent: "center" }}><div className="spinner" /></div>
+        ) : !txs.length ? (
+          <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 15 }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>📭</div>
+            No transactions yet
+          </div>
+        ) : txs.map((tx, i) => {
+          const m = TX_META[tx.type] ?? TX_META.receive;
+          const isOut = ["send", "tap_pay", "card_spend"].includes(tx.type);
+          return (
+            <div key={tx.id} className="tx-item" style={{ animationDelay: `${i * 0.03}s` }}>
+              <div className="tx-icon" style={{ background: m.bg, color: m.color, fontSize: 16 }}>{m.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{tx.merchantName || m.label}</div>
+                <div className="text-xs text-muted flex" style={{ display: "flex", gap: 8, marginTop: 2 }}>
+                  <span>{new Date(tx.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                  <span className={`badge-neon ${tx.status === "confirmed" ? "badge-green" : "badge-amber"}`} style={{ padding: "1px 8px", fontSize: 10 }}>{tx.status}</span>
                 </div>
-                <div className="h-3 w-20 bg-muted animate-pulse rounded" />
-                <div className="h-3 w-14 bg-muted animate-pulse rounded" />
-                <div className="h-5 w-16 bg-muted animate-pulse rounded-full" />
               </div>
-            ))
-          ) : !txs?.length ? (
-            <div className="px-5 py-10 text-center text-muted-foreground text-sm">No transactions yet</div>
-          ) : (
-            txs.map((tx) => (
-              <div key={tx.id} className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 px-5 py-3.5 items-center hover:bg-accent/20 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0">
-                  {txIcon(tx.type)}
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: isOut ? "#EF4444" : "#10B981" }}>
+                  {isOut ? "−" : "+"}{tx.amount.toFixed(6)}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm text-foreground truncate">
-                    {tx.merchantName ?? (tx.toAddress ? `→ ${tx.toAddress.slice(0, 14)}...` : tx.fromAddress ? `← ${tx.fromAddress.slice(0, 14)}...` : tx.type)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{format(new Date(tx.createdAt), "MMM d, h:mm a")}</div>
-                </div>
-                <div className="text-right font-mono text-sm text-foreground">{Number(tx.amount).toLocaleString()} <span className="text-muted-foreground text-xs">NEXA</span></div>
-                <div className="text-right font-mono text-sm text-muted-foreground">${Number(tx.amountUsd).toFixed(2)}</div>
-                <div className="text-right">{statusBadge(tx.status)}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>€{(tx.amount * 100).toFixed(2)}</div>
               </div>
-            ))
-          )}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

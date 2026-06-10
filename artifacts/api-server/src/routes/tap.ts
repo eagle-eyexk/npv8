@@ -1,62 +1,94 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { transactionsTable, merchantsTable } from "@workspace/db";
+import { tapTokensTable, walletsTable, merchantsTable, transactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { ClaimTapPaymentBody, GenerateTapTokenBody } from "@workspace/api-zod";
+import { requireAuth } from "../middleware/auth";
+import { NEXA_PRICE_USD } from "./auth";
 import crypto from "crypto";
+import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
-const NEXA_PRICE_USD = 0.0842;
 
-// POST /tap/generate — user generates a tap token
-router.post("/tap/generate", async (req, res) => {
+router.post("/tap/generate", requireAuth, async (req, res) => {
   try {
-    const parsed = GenerateTapTokenBody.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Invalid request body" });
-    const { amount, merchantId } = parsed.data;
-    const nonce = Math.floor(Math.random() * 1_000_000_000);
-    const expiresAt = new Date(Date.now() + 60_000); // 60s
+    const { amount, merchantId } = req.body;
+    if (!amount || !merchantId) return res.status(400).json({ error: "amount and merchantId required" });
+    const numAmount = parseFloat(amount);
+    const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, req.user!.walletId));
+    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
+    if (parseFloat(wallet.balanceNexa) < numAmount) return res.status(400).json({ error: "Insufficient balance" });
+    const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, merchantId));
+    if (!merchant) return res.status(404).json({ error: "Merchant not found" });
     const token = crypto.randomBytes(32).toString("hex");
-    res.status(201).json({ token, expiresAt: expiresAt.toISOString(), nonce, amount });
-  } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
-  }
+    const nonce = Math.floor(Math.random() * 1000000);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const [tt] = await db.insert(tapTokensTable).values({
+      token, walletId: req.user!.walletId, merchantId, nonce,
+      amount: String(numAmount), expiresAt, status: "pending",
+    }).returning();
+    return res.status(201).json({ token: tt.token, expiresAt, nonce, amount: numAmount, amountEur: numAmount * 100 });
+  } catch { return res.status(500).json({ error: "Internal server error" }); }
 });
 
-// POST /tap/claim — merchant claims a tap payment
 router.post("/tap/claim", async (req, res) => {
   try {
-    const parsed = ClaimTapPaymentBody.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Invalid request body" });
-    const { amount, merchantId } = parsed.data;
-
-    const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, merchantId));
-    const merchantName = merchant?.businessName ?? "Unknown Merchant";
-    const amountUsd = amount * NEXA_PRICE_USD;
-    const txHash = "0x" + crypto.randomBytes(20).toString("hex");
-
-    const [tx] = await db.insert(transactionsTable).values({
-      type: "tap_pay",
-      amount: String(amount),
-      amountUsd: String(amountUsd.toFixed(4)),
-      toAddress: merchant?.settlementAddress,
-      merchantName,
-      status: "confirmed",
-      txHash,
-    }).returning();
-
-    // Update merchant volume
-    if (merchant) {
-      await db.update(merchantsTable).set({
-        totalVolume: String(parseFloat(merchant.totalVolume) + amount),
-        transactionCount: merchant.transactionCount + 1,
-      }).where(eq(merchantsTable.id, merchantId));
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: "token required" });
+    const [tt] = await db.select().from(tapTokensTable).where(eq(tapTokensTable.token, token));
+    if (!tt) return res.status(404).json({ error: "Token not found" });
+    if (tt.status !== "pending") return res.status(400).json({ error: `Token already ${tt.status}` });
+    if (new Date() > new Date(tt.expiresAt)) {
+      await db.update(tapTokensTable).set({ status: "expired" }).where(eq(tapTokensTable.id, tt.id));
+      return res.status(400).json({ error: "Token expired" });
     }
+    const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, tt.walletId));
+    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
+    const numAmount = parseFloat(tt.amount);
+    if (parseFloat(wallet.balanceNexa) < numAmount) return res.status(400).json({ error: "Insufficient balance" });
+    await db.update(walletsTable).set({ balanceNexa: String((parseFloat(wallet.balanceNexa) - numAmount).toFixed(8)) }).where(eq(walletsTable.id, tt.walletId));
+    const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, tt.merchantId));
+    if (merchant?.walletId) {
+      const [mw] = await db.select().from(walletsTable).where(eq(walletsTable.id, merchant.walletId));
+      if (mw) await db.update(walletsTable).set({ balanceNexa: String((parseFloat(mw.balanceNexa) + numAmount).toFixed(8)) }).where(eq(walletsTable.id, mw.id));
+      await db.update(merchantsTable).set({ totalVolume: String((parseFloat(merchant.totalVolume) + numAmount).toFixed(8)), transactionCount: merchant.transactionCount + 1 }).where(eq(merchantsTable.id, tt.merchantId));
+    }
+    await db.update(tapTokensTable).set({ status: "claimed", claimedAt: new Date() }).where(eq(tapTokensTable.id, tt.id));
+    const txHash = "0x" + uuidv4().replace(/-/g, "").substring(0, 40);
+    const [tx] = await db.insert(transactionsTable).values({
+      walletId: tt.walletId, type: "tap_pay", amount: tt.amount,
+      amountUsd: String((numAmount * NEXA_PRICE_USD).toFixed(4)),
+      fromAddress: wallet.address, toAddress: merchant?.settlementAddress ?? "",
+      merchantName: merchant?.businessName ?? "Merchant", status: "confirmed", txHash,
+    }).returning();
+    return res.json({ success: true, txHash, amount: numAmount, amountEur: numAmount * 100, merchant: merchant?.businessName });
+  } catch { return res.status(500).json({ error: "Internal server error" }); }
+});
 
-    res.json({ status: "success", txHash, amount });
-  } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
-  }
+router.post("/tap/quick", requireAuth, async (req, res) => {
+  try {
+    const { amount, merchantId } = req.body;
+    if (!amount || !merchantId) return res.status(400).json({ error: "amount and merchantId required" });
+    const numAmount = parseFloat(amount);
+    const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, req.user!.walletId));
+    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
+    if (parseFloat(wallet.balanceNexa) < numAmount) return res.status(400).json({ error: "Insufficient balance" });
+    const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, merchantId));
+    if (!merchant) return res.status(404).json({ error: "Merchant not found" });
+    await db.update(walletsTable).set({ balanceNexa: String((parseFloat(wallet.balanceNexa) - numAmount).toFixed(8)) }).where(eq(walletsTable.id, req.user!.walletId));
+    if (merchant.walletId) {
+      const [mw] = await db.select().from(walletsTable).where(eq(walletsTable.id, merchant.walletId));
+      if (mw) await db.update(walletsTable).set({ balanceNexa: String((parseFloat(mw.balanceNexa) + numAmount).toFixed(8)) }).where(eq(walletsTable.id, mw.id));
+      await db.update(merchantsTable).set({ totalVolume: String((parseFloat(merchant.totalVolume) + numAmount).toFixed(8)), transactionCount: merchant.transactionCount + 1 }).where(eq(merchantsTable.id, merchantId));
+    }
+    const txHash = "0x" + uuidv4().replace(/-/g, "").substring(0, 40);
+    await db.insert(transactionsTable).values({
+      walletId: req.user!.walletId, type: "tap_pay", amount: String(numAmount),
+      amountUsd: String((numAmount * NEXA_PRICE_USD).toFixed(4)),
+      fromAddress: wallet.address, toAddress: merchant.settlementAddress,
+      merchantName: merchant.businessName, status: "confirmed", txHash,
+    });
+    return res.json({ success: true, txHash, amount: numAmount, amountEur: numAmount * 100, merchant: merchant.businessName });
+  } catch { return res.status(500).json({ error: "Internal server error" }); }
 });
 
 export default router;

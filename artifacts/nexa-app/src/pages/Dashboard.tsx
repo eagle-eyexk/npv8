@@ -1,167 +1,242 @@
-import { useGetDashboardSummary, useGetRecentActivity, useGetVolumeChart } from "@workspace/api-client-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft, Zap, CreditCard, Activity, Users } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
 
-function StatCard({ label, value, sub, icon: Icon, accent = false }: { label: string; value: string; sub?: string; icon: any; accent?: boolean }) {
-  return (
-    <div className={`bg-card border rounded-xl p-5 flex flex-col gap-3 ${accent ? "border-primary/30 nexa-border-glow" : "border-border"}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground uppercase tracking-wider">{label}</span>
-        <div className={`p-2 rounded-lg ${accent ? "bg-primary/10 text-primary" : "bg-accent text-muted-foreground"}`}>
-          <Icon size={14} />
-        </div>
-      </div>
-      <div>
-        <div className={`text-2xl font-bold tracking-tight ${accent ? "text-primary nexa-glow-text" : "text-foreground"}`}>{value}</div>
-        {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
-      </div>
-    </div>
-  );
+const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+const NEXA_EUR = 100;
+const BTC_USD = 67500;
+const ETH_USD = 3200;
+
+function tok() { return localStorage.getItem("nexa_token") ?? ""; }
+
+function useDashboard() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    try {
+      const r = await fetch(`${API}/api/dashboard`, { headers: { Authorization: `Bearer ${tok()}` } });
+      if (r.ok) setData(await r.json());
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+  return { data, loading, refetch: load };
 }
 
-function txTypeIcon(type: string) {
-  switch (type) {
-    case "send": return <ArrowUpRight size={14} className="text-orange-400" />;
-    case "receive": return <ArrowDownLeft size={14} className="text-emerald-400" />;
-    case "tap_pay": return <Zap size={14} className="text-primary" />;
-    case "card_spend": return <CreditCard size={14} className="text-violet-400" />;
-    default: return <Activity size={14} />;
-  }
-}
+const TX_ICONS: Record<string, { icon: string; bg: string; color: string }> = {
+  send: { icon: "↑", bg: "rgba(239,68,68,0.1)", color: "#EF4444" },
+  receive: { icon: "↓", bg: "rgba(16,185,129,0.1)", color: "#10B981" },
+  tap_pay: { icon: "⚡", bg: "rgba(14,165,233,0.1)", color: "#0EA5E9" },
+  card_spend: { icon: "💳", bg: "rgba(139,92,246,0.1)", color: "#8B5CF6" },
+  mining: { icon: "⛏️", bg: "rgba(245,158,11,0.1)", color: "#F59E0B" },
+};
 
 export default function Dashboard() {
-  const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
-  const { data: activity, isLoading: loadingActivity } = useGetRecentActivity({ limit: 8 });
-  const { data: volume, isLoading: loadingVolume } = useGetVolumeChart();
+  const { user, logout } = useAuth();
+  const { data, loading, refetch } = useDashboard();
 
-  const priceUp = (summary?.priceChange24h ?? 0) >= 0;
+  // Mining state
+  const [mining, setMining] = useState(false);
+  const [hashRate, setHashRate] = useState(0);
+  const [sessionEarned, setSessionEarned] = useState(0);
+  const miningRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hrRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startMining() {
+    setMining(true);
+    setHashRate(Math.floor(800 + Math.random() * 400));
+    hrRef.current = setInterval(() => setHashRate(h => Math.max(600, h + Math.floor((Math.random() - 0.5) * 200))), 2000);
+    miningRef.current = setInterval(async () => {
+      const r = await fetch(`${API}/api/mining/claim`, { method: "POST", headers: { Authorization: `Bearer ${tok()}` } });
+      if (r.ok) {
+        const d = await r.json();
+        setSessionEarned(e => +(e + d.reward).toFixed(8));
+        refetch();
+      }
+    }, 30000);
+  }
+
+  function stopMining() {
+    setMining(false);
+    setHashRate(0);
+    if (miningRef.current) clearInterval(miningRef.current);
+    if (hrRef.current) clearInterval(hrRef.current);
+  }
+
+  useEffect(() => () => { if (miningRef.current) clearInterval(miningRef.current); if (hrRef.current) clearInterval(hrRef.current); }, []);
+
+  if (loading) return (
+    <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="spinner" style={{ width: 36, height: 36 }} />
+    </div>
+  );
+
+  const w = data?.wallet;
+  const nexa = w?.balanceNexa ?? 0;
+  const btc = w?.balanceBtc ?? 0;
+  const eth = w?.balanceEth ?? 0;
+  const usdt = w?.balanceUsdt ?? 0;
+  const nexaEur = nexa * NEXA_EUR;
+  const totalUsd = nexa * 108 + btc * BTC_USD + eth * ETH_USD + usdt;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Your Nexa wallet at a glance</p>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-card border border-border rounded-lg text-xs">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-muted-foreground">NEXA</span>
-          <span className="font-mono font-bold text-foreground">${summary?.nexaPriceUsd?.toFixed(4) ?? "—"}</span>
-          <span className={`flex items-center gap-0.5 ${priceUp ? "text-emerald-400" : "text-red-400"}`}>
-            {priceUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-            {Math.abs(summary?.priceChange24h ?? 0).toFixed(2)}%
-          </span>
-        </div>
+    <div className="content-wrap">
+      {/* Greeting */}
+      <div style={{ padding: "24px 0 8px" }} className="anim-up">
+        <div className="text-muted text-sm">Good day,</div>
+        <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 24, fontWeight: 700 }}>
+          {user?.fullName?.split(" ")[0]} 👋
+        </h2>
       </div>
 
-      {/* Balance + Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="col-span-2 bg-card border border-primary/30 nexa-border-glow rounded-xl p-6">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Total Balance</div>
-          {loadingSummary ? (
-            <div className="h-10 w-48 bg-muted animate-pulse rounded" />
-          ) : (
-            <>
-              <div className="text-4xl font-bold text-primary nexa-glow-text font-mono">
-                {summary?.balanceNexa?.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-lg text-muted-foreground">NEXA</span>
+      {/* Main balance card */}
+      <div className="anim-up anim-delay-1" style={{ marginBottom: 20 }}>
+        <div className="nexa-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+            <div>
+              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>Total Portfolio</div>
+              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 32, fontWeight: 800 }}>
+                €{nexaEur.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-lg text-muted-foreground mt-1">${summary?.balanceUsd?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            </>
-          )}
-          <div className="flex gap-3 mt-4">
-            <Link href="/send">
-              <button className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-1.5">
-                <ArrowUpRight size={14} /> Send
-              </button>
-            </Link>
-            <Link href="/receive">
-              <button className="px-4 py-1.5 bg-accent text-foreground rounded-lg text-sm font-medium hover:bg-accent/80 transition-colors flex items-center gap-1.5">
-                <ArrowDownLeft size={14} /> Receive
-              </button>
-            </Link>
+              <div style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
+                ≈ ${totalUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} USD
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <span className="badge-neon" style={{ background: "rgba(255,255,255,0.2)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)" }}>
+                1 NEXA = €100
+              </span>
+            </div>
           </div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, opacity: 0.95 }}>
+            {nexa.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 })} NEXA
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4, fontFamily: "monospace" }}>{w?.address?.slice(0, 22)}…</div>
+          <div style={{ position: "absolute", top: -30, right: -30, width: 180, height: 180, background: "radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%)", borderRadius: "50%", pointerEvents: "none" }} />
         </div>
-
-        <StatCard label="Merchants" value={String(summary?.activeMerchants ?? "—")} sub="Active on Nexa Chain" icon={Users} />
-        <StatCard label="Transactions" value={String(summary?.transactionCount ?? "—")} sub="Total processed" icon={Activity} />
       </div>
 
-      {/* Volume chart */}
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-4">30-Day Volume (NEXA)</h2>
-        {loadingVolume ? (
-          <div className="h-40 bg-muted animate-pulse rounded" />
-        ) : (
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={volume ?? []} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="volGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(191,100%,50%)" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="hsl(191,100%,50%)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} tick={{ fontSize: 10, fill: "hsl(215,20%,45%)" }} axisLine={false} tickLine={false} interval={6} />
-              <YAxis tick={{ fontSize: 10, fill: "hsl(215,20%,45%)" }} axisLine={false} tickLine={false} />
-              <Tooltip
-                contentStyle={{ background: "hsl(222,44%,11%)", border: "1px solid hsl(222,30%,18%)", borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: "hsl(210,40%,70%)" }}
-                itemStyle={{ color: "hsl(191,100%,50%)" }}
-              />
-              <Area type="monotone" dataKey="volume" stroke="hsl(191,100%,50%)" strokeWidth={2} fill="url(#volGrad)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
+      {/* Quick actions */}
+      <div className="anim-up anim-delay-2" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+        {[
+          { label: "Send", href: "/send", icon: "↑", color: "#0EA5E9", bg: "rgba(14,165,233,0.1)" },
+          { label: "Receive", href: "/receive", icon: "↓", color: "#10B981", bg: "rgba(16,185,129,0.1)" },
+          { label: "Tap Pay", href: "/tap", icon: "⚡", color: "#8B5CF6", bg: "rgba(139,92,246,0.1)" },
+          { label: "Card", href: "/card", icon: "💳", color: "#EC4899", bg: "rgba(236,72,153,0.1)" },
+        ].map(a => (
+          <Link key={a.href} href={a.href}>
+            <div className="glass-card" style={{ padding: "14px 8px", textAlign: "center", cursor: "pointer" }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: a.bg, color: a.color, fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 8px" }}>{a.icon}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)" }}>{a.label}</div>
+            </div>
+          </Link>
+        ))}
       </div>
 
-      {/* Flow stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Sent" value={`$${(summary?.totalSent ?? 0).toFixed(0)}`} icon={ArrowUpRight} />
-        <StatCard label="Received" value={`$${(summary?.totalReceived ?? 0).toFixed(0)}`} icon={ArrowDownLeft} />
-        <StatCard label="Tap Payments" value={`$${(summary?.totalTapPay ?? 0).toFixed(0)}`} icon={Zap} accent />
-        <StatCard label="Card Spend" value={`$${(summary?.totalCardSpend ?? 0).toFixed(0)}`} icon={CreditCard} />
-      </div>
-
-      {/* Recent activity */}
-      <div className="bg-card border border-border rounded-xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold">Recent Activity</h2>
-          <Link href="/transactions" className="text-xs text-primary hover:underline">View all</Link>
+      {/* Crypto balances */}
+      <div className="anim-up anim-delay-3" style={{ marginBottom: 20 }}>
+        <div className="flex-between" style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>Balances</div>
+          <span className="badge-neon badge-blue" style={{ fontSize: 11 }}>Live</span>
         </div>
-        <div className="divide-y divide-border">
-          {loadingActivity ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="px-5 py-3 flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full bg-muted animate-pulse" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3 w-48 bg-muted animate-pulse rounded" />
-                  <div className="h-2.5 w-24 bg-muted animate-pulse rounded" />
-                </div>
+        <div className="grid-2" style={{ gap: 10 }}>
+          {[
+            { label: "NEXA", balance: nexa, sub: `€${nexaEur.toFixed(2)}`, icon: "🔷", color: "#0EA5E9" },
+            { label: "Bitcoin", balance: btc, sub: `$${(btc * BTC_USD).toFixed(2)}`, icon: "🟡", color: "#F59E0B" },
+            { label: "Ethereum", balance: eth, sub: `$${(eth * ETH_USD).toFixed(2)}`, icon: "🟣", color: "#8B5CF6" },
+            { label: "USDT", balance: usdt, sub: `$${usdt.toFixed(2)}`, icon: "🟢", color: "#10B981" },
+          ].map(c => (
+            <div key={c.label} className="stat-card" style={{ padding: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 20 }}>{c.icon}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: c.color }}>{c.label}</span>
               </div>
-            ))
-          ) : (
-            (activity ?? []).map((item) => (
-              <div key={item.id} className="px-5 py-3 flex items-center gap-3 hover:bg-accent/30 transition-colors">
-                <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center shrink-0">
-                  {txTypeIcon(item.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-foreground truncate">{item.description}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {format(new Date(item.createdAt), "MMM d, h:mm a")}
-                  </div>
-                </div>
-                {item.amount != null && (
-                  <div className="text-sm font-mono text-muted-foreground shrink-0">
-                    {item.amount.toFixed(2)} NEXA
-                  </div>
-                )}
+              <div className="stat-value" style={{ fontSize: 18, color: "var(--text)" }}>
+                {c.label === "NEXA" ? c.balance.toFixed(6) : c.label === "Bitcoin" ? c.balance.toFixed(8) : c.balance.toFixed(2)}
               </div>
-            ))
+              <div className="stat-label" style={{ color: c.color, fontSize: 11, marginTop: 2 }}>{c.sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Mining */}
+      <div className="anim-up anim-delay-4" style={{ marginBottom: 20 }}>
+        <div className="mining-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {mining ? <div className="mining-pulse" /> : <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--text-light)" }} />}
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>⛏️ Phone Mining</div>
+                <div className="text-xs text-muted">{mining ? `${hashRate.toLocaleString()} H/s` : "Idle"}</div>
+              </div>
+            </div>
+            <button className={`btn ${mining ? "btn-red" : "btn-green"}`} style={{ padding: "8px 18px", fontSize: 13, borderRadius: 10 }}
+              onClick={mining ? stopMining : startMining}>
+              {mining ? "Stop" : "Start Mining"}
+            </button>
+          </div>
+          {mining && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+              <div style={{ background: "rgba(255,255,255,0.5)", borderRadius: 10, padding: "10px 14px" }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 3 }}>Session Earned</div>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16, color: "var(--accent)" }}>
+                  {sessionEarned.toFixed(7)} NEXA
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>≈ €{(sessionEarned * 100).toFixed(4)}</div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.5)", borderRadius: 10, padding: "10px 14px" }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 3 }}>Hash Rate</div>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16, color: "var(--primary)" }}>
+                  {hashRate.toLocaleString()} H/s
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Claim every 30s</div>
+              </div>
+            </div>
+          )}
+          {!mining && (
+            <div className="text-sm text-muted" style={{ marginTop: 4 }}>
+              Earn <strong style={{ color: "var(--accent)" }}>0.0001 NEXA (€0.01)</strong> every 30 seconds — just run the app.
+            </div>
           )}
         </div>
+      </div>
+
+      {/* Recent transactions */}
+      <div className="anim-up anim-delay-5">
+        <div className="flex-between" style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>Recent Activity</div>
+          <Link href="/transactions" style={{ color: "var(--primary)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>See all →</Link>
+        </div>
+        <div className="glass-card" style={{ padding: "0 16px" }}>
+          {!data?.recentTransactions?.length ? (
+            <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>No transactions yet</div>
+          ) : data.recentTransactions.map((tx: any) => {
+            const t = TX_ICONS[tx.type] ?? TX_ICONS.receive;
+            const isOut = tx.type === "send" || tx.type === "tap_pay" || tx.type === "card_spend";
+            return (
+              <div key={tx.id} className="tx-item">
+                <div className="tx-icon" style={{ background: t.bg, color: t.color }}>{t.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{tx.merchantName || (tx.type === "mining" ? "Mining Reward" : tx.type.replace("_", " "))}</div>
+                  <div className="text-xs text-muted">{new Date(tx.createdAt).toLocaleDateString()}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: isOut ? "#EF4444" : "#10B981" }}>
+                    {isOut ? "−" : "+"}{tx.amount.toFixed(6)} NEXA
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>€{(tx.amount * 100).toFixed(2)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Logout */}
+      <div style={{ marginTop: 24, textAlign: "center" }}>
+        <button className="btn btn-secondary" style={{ fontSize: 13, padding: "8px 20px" }} onClick={logout}>Sign Out</button>
       </div>
     </div>
   );

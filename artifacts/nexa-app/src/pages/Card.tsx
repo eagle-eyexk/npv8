@@ -1,145 +1,102 @@
-import { useGetCard, useListCardSpend, useUpdateMerchant } from "@workspace/api-client-react";
-import { CreditCard, Lock, Unlock, ShoppingCart, Gamepad2, Music, Car, UtensilsCrossed, Package } from "lucide-react";
-import { format } from "date-fns";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
-function categoryIcon(cat: string) {
-  const c = cat.toLowerCase();
-  if (c.includes("gaming") || c.includes("game")) return <Gamepad2 size={14} className="text-violet-400" />;
-  if (c.includes("entertainment") || c.includes("music")) return <Music size={14} className="text-pink-400" />;
-  if (c.includes("transport")) return <Car size={14} className="text-blue-400" />;
-  if (c.includes("food") || c.includes("grocer") || c.includes("restaurant")) return <UtensilsCrossed size={14} className="text-orange-400" />;
-  if (c.includes("shop") || c.includes("retail")) return <ShoppingCart size={14} className="text-emerald-400" />;
-  return <Package size={14} className="text-muted-foreground" />;
-}
+const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+function tok() { return localStorage.getItem("nexa_token") ?? ""; }
 
 export default function Card() {
-  const { data: card, isLoading: loadingCard } = useGetCard();
-  const { data: spend, isLoading: loadingSpend } = useListCardSpend({ limit: 20 });
+  const { user } = useAuth();
+  const [card, setCard] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [freezing, setFreezing] = useState(false);
 
-  const isFrozen = card?.status === "frozen";
-  const availablePct = card ? (card.availableUsd / card.spendLimitUsd) * 100 : 0;
+  useEffect(() => {
+    fetch(`${API}/api/card`, { headers: { Authorization: `Bearer ${tok()}` } })
+      .then(r => r.json()).then(d => { if (d.id) setCard(d); }).catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const totalSpent = (spend ?? []).filter((s) => s.status !== "declined").reduce((sum, s) => sum + s.amountUsd, 0);
+  async function toggleFreeze() {
+    setFreezing(true);
+    const r = await fetch(`${API}/api/card/freeze`, { method: "POST", headers: { Authorization: `Bearer ${tok()}` } });
+    if (r.ok) { const d = await r.json(); setCard((c: any) => ({ ...c, status: d.status })); }
+    setFreezing(false);
+  }
+
+  if (loading) return <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}><div className="spinner" style={{ width: 36, height: 36 }} /></div>;
+  if (!card) return <div className="content-wrap" style={{ paddingTop: 40, textAlign: "center", color: "var(--text-muted)" }}>No card found</div>;
+
+  const frozen = card.status === "frozen";
 
   return (
-    <div className="p-6 space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold">Debit Card</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Spend NEXA anywhere {card?.network ?? "Visa"} is accepted</p>
+    <div className="content-wrap">
+      <div style={{ padding: "24px 0 20px" }} className="anim-up">
+        <h2 className="page-title">Virtual Card</h2>
       </div>
 
-      {/* Card visual */}
-      <div className={`relative rounded-2xl p-6 overflow-hidden transition-all duration-300 ${isFrozen ? "opacity-60 grayscale" : ""}`}
-        style={{ background: "linear-gradient(135deg, hsl(222,47%,14%) 0%, hsl(191,60%,18%) 100%)", border: "1px solid hsl(191,100%,50%,0.3)", boxShadow: "0 0 40px hsl(191,100%,50%,0.15)" }}>
-        {/* Circuit lines */}
-        <div className="absolute inset-0 opacity-10 circuit-bg" />
-
-        {loadingCard ? (
-          <div className="space-y-3 animate-pulse">
-            <div className="h-8 w-12 bg-white/20 rounded" />
-            <div className="h-4 w-48 bg-white/20 rounded mt-6" />
-            <div className="flex justify-between mt-4">
-              <div className="h-4 w-32 bg-white/20 rounded" />
-              <div className="h-4 w-20 bg-white/20 rounded" />
+      {/* 3D Card */}
+      <div className="anim-up anim-delay-1" style={{ marginBottom: 24 }}>
+        <div className={`nexa-card`} style={frozen ? { filter: "grayscale(0.5) opacity(0.8)" } : {}}>
+          <div className="card-chip" />
+          <div style={{ fontSize: 22, fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, letterSpacing: "0.12em", marginBottom: 20 }}>
+            •••• •••• •••• {card.last4}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+            <div>
+              <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>Card Holder</div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{user?.fullName?.toUpperCase()}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>Expires</div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{String(card.expiryMonth).padStart(2, "0")}/{card.expiryYear}</div>
             </div>
           </div>
-        ) : (
-          <>
-            <div className="flex justify-between items-start mb-8">
-              <div className="w-10 h-7 rounded bg-yellow-400/80" style={{ background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)" }} />
-              {isFrozen && (
-                <span className="bg-blue-500/20 text-blue-300 text-xs px-2.5 py-1 rounded-full border border-blue-400/30 flex items-center gap-1">
-                  <Lock size={10} /> Frozen
-                </span>
-              )}
-            </div>
-            <div className="font-mono text-xl tracking-[0.2em] text-white mb-5">
-              •••• •••• •••• {card?.last4}
-            </div>
-            <div className="flex justify-between text-xs text-white/60">
-              <div>
-                <div className="text-[10px] uppercase tracking-wider mb-0.5">Card Holder</div>
-                <div className="text-white font-medium text-sm">NEXA USER</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider mb-0.5">Expires</div>
-                <div className="text-white font-medium text-sm">{String(card?.expiryMonth).padStart(2, "0")}/{card?.expiryYear}</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider mb-0.5">Network</div>
-                <div className="text-white font-medium text-sm">{card?.network}</div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Card stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-card border border-primary/20 nexa-border-glow rounded-xl p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">Available</div>
-          <div className="text-xl font-bold text-primary mt-1">${card?.availableUsd?.toLocaleString(undefined, { minimumFractionDigits: 2 }) ?? "—"}</div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">Limit</div>
-          <div className="text-xl font-bold text-foreground mt-1">${card?.spendLimitUsd?.toLocaleString() ?? "—"}</div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">Total Spent</div>
-          <div className="text-xl font-bold text-foreground mt-1">${totalSpent.toFixed(2)}</div>
+          <div style={{ position: "absolute", top: 20, right: 20, fontSize: 13, fontWeight: 700, opacity: 0.9 }}>{card.network}</div>
+          {frozen && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.35)", borderRadius: 20 }}><span style={{ fontSize: 42 }}>🔒</span></div>}
         </div>
       </div>
 
-      {/* Available limit bar */}
-      <div className="bg-card border border-border rounded-xl p-4 space-y-2">
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Utilization</span>
-          <span>{(100 - availablePct).toFixed(1)}% used</span>
+      {/* Stats */}
+      <div className="anim-up anim-delay-2 grid-2" style={{ marginBottom: 20 }}>
+        <div className="stat-card" style={{ textAlign: "center" }}>
+          <div className="stat-value" style={{ color: "var(--primary)" }}>${parseFloat(card.availableUsd).toFixed(0)}</div>
+          <div className="stat-label">Available</div>
         </div>
-        <div className="h-2 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary rounded-full transition-all duration-500"
-            style={{ width: `${availablePct}%` }}
-          />
+        <div className="stat-card" style={{ textAlign: "center" }}>
+          <div className="stat-value" style={{ color: "var(--text-muted)" }}>${parseFloat(card.spendLimitUsd).toFixed(0)}</div>
+          <div className="stat-label">Limit</div>
+        </div>
+      </div>
+
+      {/* Status + Controls */}
+      <div className="anim-up anim-delay-3 glass-card" style={{ padding: 20, marginBottom: 20 }}>
+        <div className="flex-between">
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: frozen ? "#EF4444" : "#10B981", boxShadow: frozen ? "0 0 8px rgba(239,68,68,0.5)" : "0 0 8px rgba(16,185,129,0.5)" }} />
+            <span style={{ fontWeight: 600, fontSize: 15 }}>{frozen ? "Card Frozen" : "Card Active"}</span>
+          </div>
+          <button className={`btn ${frozen ? "btn-green" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }} onClick={toggleFreeze} disabled={freezing}>
+            {freezing ? <span className="spinner" /> : frozen ? "🔓 Unfreeze" : "🔒 Freeze"}
+          </button>
         </div>
       </div>
 
       {/* Spend history */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Card Spend History</h3>
-          <CreditCard size={14} className="text-muted-foreground" />
-        </div>
-        <div className="divide-y divide-border">
-          {loadingSpend ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="px-5 py-3 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3 w-36 bg-muted animate-pulse rounded" />
-                  <div className="h-2.5 w-20 bg-muted animate-pulse rounded" />
-                </div>
-                <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+      <div className="anim-up anim-delay-4">
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>Spend History</div>
+        <div className="glass-card" style={{ padding: "0 16px" }}>
+          {!card.spendHistory?.length ? (
+            <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-muted)" }}>No transactions yet</div>
+          ) : card.spendHistory.map((s: any) => (
+            <div key={s.id} className="tx-item">
+              <div className="tx-icon" style={{ background: "rgba(139,92,246,0.1)", color: "#8B5CF6" }}>💳</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{s.merchantName}</div>
+                <div className="text-xs text-muted">{s.category} · {new Date(s.createdAt).toLocaleDateString()}</div>
               </div>
-            ))
-          ) : !spend?.length ? (
-            <div className="px-5 py-10 text-center text-muted-foreground text-sm">No card spend yet</div>
-          ) : (
-            spend.map((s) => (
-              <div key={s.id} className="px-5 py-3 flex items-center gap-3 hover:bg-accent/20 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0">
-                  {categoryIcon(s.category)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-foreground">{s.merchantName}</div>
-                  <div className="text-xs text-muted-foreground">{s.category} · {format(new Date(s.createdAt), "MMM d, h:mm a")}</div>
-                </div>
-                <div className="text-sm font-mono font-medium text-foreground">
-                  -${s.amountUsd.toFixed(2)}
-                </div>
-              </div>
-            ))
-          )}
+              <div style={{ fontWeight: 700, color: "#EF4444" }}>−${s.amountUsd}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

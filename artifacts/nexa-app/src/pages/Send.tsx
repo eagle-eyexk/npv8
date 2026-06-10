@@ -1,199 +1,91 @@
-import { useState } from "react";
-import { useGetWallet, useCreateTransaction, getListTransactionsQueryKey, getGetDashboardSummaryQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
 
-const NEXA_PRICE = 0.0842;
+const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+function tok() { return localStorage.getItem("nexa_token") ?? ""; }
 
 export default function Send() {
-  const { data: wallet } = useGetWallet();
-  const createTx = useCreateTransaction();
-  const qc = useQueryClient();
-
-  const [to, setTo] = useState("");
+  const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
-  const [step, setStep] = useState<"form" | "confirm" | "success" | "error">("form");
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [err, setErr] = useState("");
+  const [balance, setBalance] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState<any>(null);
+  const [error, setError] = useState("");
 
-  const numAmount = parseFloat(amount) || 0;
-  const usdValue = numAmount * NEXA_PRICE;
-  const fee = 200; // unexa
-  const valid = to.length > 10 && numAmount > 0 && numAmount <= (wallet?.balanceNexa ?? 0);
+  useEffect(() => {
+    fetch(`${API}/api/wallet`, { headers: { Authorization: `Bearer ${tok()}` } })
+      .then(r => r.json()).then(d => setBalance(d.balanceNexa ?? null)).catch(() => {});
+  }, []);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!valid) return;
-    setStep("confirm");
+    setError(""); setSuccess(null); setLoading(true);
+    try {
+      const r = await fetch(`${API}/api/transactions`, {
+        method: "POST", headers: { Authorization: `Bearer ${tok()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ toAddress, amount: parseFloat(amount), memo }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setSuccess(d);
+      setToAddress(""); setAmount(""); setMemo("");
+      setBalance(b => b !== null ? +(b - parseFloat(amount)).toFixed(8) : null);
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
-  function handleConfirm() {
-    createTx.mutate(
-      { data: { toAddress: to, amount: numAmount, memo } },
-      {
-        onSuccess: (tx) => {
-          setTxHash(tx.txHash ?? null);
-          setStep("success");
-          qc.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
-          qc.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
-        },
-        onError: () => {
-          setErr("Transaction failed. Please try again.");
-          setStep("error");
-        },
-      }
-    );
-  }
-
-  function reset() {
-    setTo(""); setAmount(""); setMemo(""); setStep("form"); setTxHash(null); setErr("");
-  }
+  const eur = amount ? (parseFloat(amount) * 100).toFixed(2) : null;
 
   return (
-    <div className="p-6 max-w-lg space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Send NEXA</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Transfer tokens to any Nexa address</p>
+    <div className="content-wrap">
+      <div style={{ padding: "24px 0 20px" }} className="anim-up">
+        <h2 className="page-title">Send NEXA</h2>
+        <div className="text-sm text-muted mt-4">Transfer to any NEXA address</div>
       </div>
 
-      {/* Balance */}
-      <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">Available Balance</span>
-        <div className="text-right">
-          <div className="font-mono font-bold text-primary">{wallet?.balanceNexa?.toLocaleString()} NEXA</div>
-          <div className="text-xs text-muted-foreground">${wallet?.balanceUsd?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-        </div>
-      </div>
-
-      {step === "form" && (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground uppercase tracking-wider">Recipient Address</label>
-            <input
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              placeholder="nexa1..."
-              className="w-full bg-card border border-input rounded-lg px-3 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground uppercase tracking-wider">Amount (NEXA)</label>
-            <div className="relative">
-              <input
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                type="number"
-                min="0"
-                step="any"
-                placeholder="0.00"
-                className="w-full bg-card border border-input rounded-lg px-3 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors pr-28"
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                ≈ ${usdValue.toFixed(2)} USD
-              </div>
+      {balance !== null && (
+        <div className="anim-up anim-delay-1 glass-card" style={{ padding: 16, marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div className="text-xs text-muted" style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>Available</div>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 20, color: "var(--primary)" }}>
+              {balance.toFixed(6)} NEXA
             </div>
-            <button
-              type="button"
-              onClick={() => setAmount(String(wallet?.balanceNexa ?? 0))}
-              className="text-xs text-primary hover:underline"
-            >
-              Use max
-            </button>
           </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground uppercase tracking-wider">Memo (optional)</label>
-            <input
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              placeholder="Payment for..."
-              className="w-full bg-card border border-input rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-            />
+          <div style={{ textAlign: "right" }}>
+            <div className="text-xs text-muted">In EUR</div>
+            <div style={{ fontWeight: 700, color: "var(--accent)" }}>€{(balance * 100).toFixed(2)}</div>
           </div>
+        </div>
+      )}
 
-          <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
-            <div className="flex justify-between"><span>Network fee</span><span className="font-mono">{fee} unexa</span></div>
-            <div className="flex justify-between"><span>You send</span><span className="font-mono text-foreground">{numAmount.toLocaleString()} NEXA</span></div>
+      {success ? (
+        <div className="anim-in glass-card" style={{ padding: 28, textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+          <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>Transaction Sent!</div>
+          <div className="text-muted text-sm" style={{ marginBottom: 16 }}>{success.amount} NEXA · €{(success.amount * 100).toFixed(2)}</div>
+          <div className="mono text-xs text-muted" style={{ wordBreak: "break-all" }}>{success.txHash}</div>
+          <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={() => setSuccess(null)}>Send Another</button>
+        </div>
+      ) : (
+        <form onSubmit={handleSend} className="anim-up anim-delay-2" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="input-wrap">
+            <label className="input-label">Recipient Address</label>
+            <input className="input-field mono" placeholder="nexa1…" value={toAddress} onChange={e => setToAddress(e.target.value)} required />
           </div>
-
-          <button
-            type="submit"
-            disabled={!valid}
-            className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ArrowUpRight size={16} /> Review Transaction
+          <div className="input-wrap">
+            <label className="input-label">Amount (NEXA)</label>
+            <input className="input-field" type="number" step="0.000001" min="0.000001" placeholder="0.0000" value={amount} onChange={e => setAmount(e.target.value)} required />
+            {eur && <div className="text-sm text-muted mt-4">≈ <strong style={{ color: "var(--accent)" }}>€{eur}</strong></div>}
+          </div>
+          <div className="input-wrap">
+            <label className="input-label">Memo (optional)</label>
+            <input className="input-field" placeholder="Note for recipient…" value={memo} onChange={e => setMemo(e.target.value)} />
+          </div>
+          {error && <div className="form-error">{error}</div>}
+          <button className="btn btn-primary btn-lg w-full" disabled={loading}>
+            {loading ? <span className="spinner" /> : `Send ${amount || "0"} NEXA${eur ? ` · €${eur}` : ""}`}
           </button>
         </form>
-      )}
-
-      {step === "confirm" && (
-        <div className="space-y-4">
-          <div className="bg-card border border-primary/30 nexa-border-glow rounded-xl p-5 space-y-3">
-            <h3 className="font-semibold text-foreground">Confirm Transfer</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">To</span>
-                <span className="font-mono text-xs text-foreground truncate max-w-[200px]">{to}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Amount</span>
-                <span className="font-mono font-bold text-primary">{numAmount.toLocaleString()} NEXA</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">USD Value</span>
-                <span className="font-mono">${usdValue.toFixed(2)}</span>
-              </div>
-              {memo && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Memo</span>
-                  <span>{memo}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => setStep("form")} className="flex-1 py-3 bg-accent text-foreground rounded-xl font-semibold text-sm hover:bg-accent/80 transition-colors">
-              Back
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={createTx.isPending}
-              className="flex-1 py-3 bg-primary text-primary-foreground rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-60"
-            >
-              {createTx.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
-              {createTx.isPending ? "Sending..." : "Confirm & Send"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === "success" && (
-        <div className="bg-card border border-emerald-500/30 rounded-xl p-6 text-center space-y-3">
-          <CheckCircle className="mx-auto text-emerald-400" size={40} />
-          <h3 className="font-bold text-foreground text-lg">Transaction Sent</h3>
-          <p className="text-sm text-muted-foreground">Your NEXA is on its way.</p>
-          {txHash && (
-            <div className="bg-muted rounded-lg p-2 text-xs font-mono text-muted-foreground break-all">
-              {txHash}
-            </div>
-          )}
-          <button onClick={reset} className="w-full py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity">
-            Send Another
-          </button>
-        </div>
-      )}
-
-      {step === "error" && (
-        <div className="bg-card border border-destructive/30 rounded-xl p-6 text-center space-y-3">
-          <AlertCircle className="mx-auto text-destructive" size={40} />
-          <h3 className="font-bold text-foreground text-lg">Transaction Failed</h3>
-          <p className="text-sm text-muted-foreground">{err}</p>
-          <button onClick={reset} className="w-full py-2.5 bg-accent text-foreground rounded-xl text-sm font-semibold hover:bg-accent/80 transition-colors">
-            Try Again
-          </button>
-        </div>
       )}
     </div>
   );

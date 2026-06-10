@@ -1,98 +1,67 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { transactionsTable, walletsTable, merchantsTable } from "@workspace/db";
-import { eq, desc, gte, sql } from "drizzle-orm";
-import { GetRecentActivityQueryParams } from "@workspace/api-zod";
+import { eq, desc, sql } from "drizzle-orm";
+import { requireAuth } from "../middleware/auth";
+import { NEXA_PRICE_USD } from "./auth";
 
 const router = Router();
-const NEXA_PRICE_USD = 0.0842;
+const BTC_PRICE_USD = 67500;
+const ETH_PRICE_USD = 3200;
 
-// GET /dashboard/summary
-router.get("/dashboard/summary", async (req, res) => {
+router.get("/dashboard", requireAuth, async (req, res) => {
   try {
-    const [wallet] = await db.select().from(walletsTable).limit(1);
-    const txs = await db.select().from(transactionsTable);
+    const walletId = req.user!.walletId;
+    const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
+    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
 
-    let totalSent = 0, totalReceived = 0, totalTapPay = 0, totalCardSpend = 0;
-    for (const t of txs) {
-      const amt = parseFloat(t.amountUsd);
-      if (t.type === "send") totalSent += amt;
-      if (t.type === "receive") totalReceived += amt;
-      if (t.type === "tap_pay") totalTapPay += amt;
-      if (t.type === "card_spend") totalCardSpend += amt;
-    }
+    const recentTx = await db.select().from(transactionsTable)
+      .where(eq(transactionsTable.walletId, walletId))
+      .orderBy(desc(transactionsTable.createdAt)).limit(5);
 
-    const activeMerchantsResult = await db.select().from(merchantsTable).where(eq(merchantsTable.isActive, true));
+    const totalSent = await db.select({ total: sql<string>`coalesce(sum(amount),0)` })
+      .from(transactionsTable)
+      .where(sql`wallet_id = ${walletId} AND type = 'send'`);
+    const totalReceived = await db.select({ total: sql<string>`coalesce(sum(amount),0)` })
+      .from(transactionsTable)
+      .where(sql`wallet_id = ${walletId} AND type = 'receive'`);
 
-    res.json({
-      balanceNexa: wallet ? parseFloat(wallet.balanceNexa) : 0,
-      balanceUsd: wallet ? parseFloat(wallet.balanceUsd) : 0,
-      totalSent,
-      totalReceived,
-      totalTapPay,
-      totalCardSpend,
-      nexaPriceUsd: NEXA_PRICE_USD,
-      priceChange24h: 3.47,
-      activeMerchants: activeMerchantsResult.length,
-      transactionCount: txs.length,
+    const nexa = parseFloat(wallet.balanceNexa);
+    const btc = parseFloat(wallet.balanceBtc);
+    const eth = parseFloat(wallet.balanceEth);
+    const usdt = parseFloat(wallet.balanceUsdt);
+    const totalUsd = nexa * NEXA_PRICE_USD + btc * BTC_PRICE_USD + eth * ETH_PRICE_USD + usdt;
+
+    return res.json({
+      wallet: {
+        id: wallet.id,
+        address: wallet.address,
+        balanceNexa: nexa,
+        balanceEur: nexa * 100,
+        balanceUsd: parseFloat(totalUsd.toFixed(2)),
+        balanceBtc: btc,
+        balanceEth: eth,
+        balanceUsdt: usdt,
+        nexaPriceEur: 100,
+        nexaPriceUsd: NEXA_PRICE_USD,
+        kycStatus: wallet.kycStatus,
+      },
+      stats: {
+        totalSent: parseFloat(totalSent[0]?.total ?? "0"),
+        totalReceived: parseFloat(totalReceived[0]?.total ?? "0"),
+        transactionCount: recentTx.length,
+      },
+      recentTransactions: recentTx.map(t => ({
+        id: t.id, type: t.type, amount: parseFloat(t.amount),
+        amountEur: parseFloat(t.amount) * 100,
+        amountUsd: parseFloat(t.amountUsd),
+        merchantName: t.merchantName, status: t.status, createdAt: t.createdAt,
+        fromAddress: t.fromAddress, toAddress: t.toAddress,
+      })),
     });
   } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// GET /dashboard/activity
-router.get("/dashboard/activity", async (req, res) => {
-  try {
-    const parsed = GetRecentActivityQueryParams.safeParse(req.query);
-    const limit = parsed.success ? (parsed.data.limit ?? 10) : 10;
-    const txs = await db.select().from(transactionsTable).orderBy(desc(transactionsTable.createdAt)).limit(limit);
-
-    const items = txs.map((t) => {
-      let description = "";
-      if (t.type === "send") description = `Sent ${parseFloat(t.amount).toFixed(2)} NEXA to ${t.toAddress?.slice(0, 12)}...`;
-      else if (t.type === "receive") description = `Received ${parseFloat(t.amount).toFixed(2)} NEXA`;
-      else if (t.type === "tap_pay") description = `Tap payment at ${t.merchantName ?? "merchant"}`;
-      else if (t.type === "card_spend") description = `Card spend at ${t.merchantName ?? "merchant"}`;
-      return {
-        id: t.id,
-        type: t.type,
-        description,
-        amount: parseFloat(t.amount),
-        createdAt: t.createdAt,
-      };
-    });
-
-    res.json(items);
-  } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// GET /dashboard/volume — 30-day chart
-router.get("/dashboard/volume", async (req, res) => {
-  try {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const txs = await db.select().from(transactionsTable).where(gte(transactionsTable.createdAt, thirtyDaysAgo));
-
-    const byDay: Record<string, { volume: number; txCount: number }> = {};
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-      const key = d.toISOString().slice(0, 10);
-      byDay[key] = { volume: 0, txCount: 0 };
-    }
-
-    for (const t of txs) {
-      const key = t.createdAt.toISOString().slice(0, 10);
-      if (byDay[key]) {
-        byDay[key].volume += parseFloat(t.amount);
-        byDay[key].txCount += 1;
-      }
-    }
-
-    res.json(Object.entries(byDay).map(([date, data]) => ({ date, ...data })));
-  } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 

@@ -1,1 +1,2 @@
 - [Tailwind 4 dark theme CSS vars](tailwind4-dark-theme.md) — hsl(var(--x)) @theme inline pattern doesn't apply bg at runtime; use direct hsl() values in @layer base instead.
+- [Nexa App architecture](nexa-app-arch.md) — full-stack crypto wallet; JWT auth via bcryptjs+jsonwebtoken; no generated API client — all fetches use raw fetch() with localStorage token; admin at /admin uses separate nexa_admin_token.

@@ -1,113 +1,79 @@
 import { Link, useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 import nexaLogo from "@assets/3492540F-12E9-4FDB-83EF-D471EF90B334_1781047394056.png";
-import {
-  LayoutDashboard,
-  ArrowUpRight,
-  QrCode,
-  List,
-  Zap,
-  Store,
-  CreditCard,
-  Menu,
-  X,
-} from "lucide-react";
-import { useState } from "react";
-import { cn } from "@/lib/utils";
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/send", label: "Send", icon: ArrowUpRight },
-  { href: "/receive", label: "Receive", icon: QrCode },
-  { href: "/transactions", label: "Transactions", icon: List },
-  { href: "/tap", label: "Tap to Pay", icon: Zap },
-  { href: "/merchants", label: "Merchants", icon: Store },
-  { href: "/card", label: "Debit Card", icon: CreditCard },
+const navItems = [
+  { path: "/dashboard", label: "Home", icon: (a: boolean) => (
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={a ? 2.5 : 2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+    </svg>
+  )},
+  { path: "/send", label: "Send", icon: (a: boolean) => (
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={a ? 2.5 : 2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+    </svg>
+  )},
+  { path: "/tap", label: "Tap", icon: (a: boolean) => (
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={a ? 2.5 : 2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+    </svg>
+  )},
+  { path: "/transactions", label: "History", icon: (a: boolean) => (
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={a ? 2.5 : 2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    </svg>
+  )},
+  { path: "/card", label: "Card", icon: (a: boolean) => (
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={a ? 2.5 : 2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+    </svg>
+  )},
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { user } = useAuth();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background circuit-bg">
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "flex flex-col w-60 shrink-0 bg-sidebar border-r border-sidebar-border transition-all duration-200 z-40",
-          mobileOpen ? "fixed inset-y-0 left-0" : "hidden md:flex"
-        )}
-      >
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 px-4 py-5 border-b border-sidebar-border hover:opacity-90 transition-opacity">
-          <img src={nexaLogo} alt="Nexa" className="h-8 w-8 object-contain" />
-          <div className="flex flex-col">
-            <span className="text-sm font-bold tracking-widest text-primary uppercase nexa-glow-text">NEXA</span>
-            <span className="text-[9px] text-muted-foreground tracking-widest uppercase">Payment Crypto</span>
-          </div>
-        </Link>
-
-        {/* Nav */}
-        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-          {nav.map(({ href, label, icon: Icon }) => {
-            const active = location === href || (href !== "/" && location.startsWith(href));
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
-                  active
-                    ? "bg-primary/10 text-primary border border-primary/20 nexa-border-glow"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                )}
-              >
-                <Icon size={16} className={active ? "text-primary" : ""} />
-                {label}
-                {active && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Bottom info */}
-        <div className="px-4 py-3 border-t border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-muted-foreground">Nexa Chain: Live</span>
+    <div className="page-wrap">
+      {/* Header */}
+      <header className="page-header">
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <img src={nexaLogo} alt="NEXA" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }} />
+          <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 18, background: "linear-gradient(135deg,#0EA5E9,#8B5CF6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+            NEXA
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {user?.role === "merchant" && (
+            <Link href="/merchant-pos">
+              <span className="badge-neon badge-purple" style={{ cursor: "pointer" }}>POS</span>
+            </Link>
+          )}
+          <div style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg,#0EA5E9,#8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14 }}>
+            {user?.fullName?.charAt(0)?.toUpperCase() ?? "U"}
           </div>
         </div>
-      </aside>
+      </header>
 
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 z-30 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+      {/* Content */}
+      <main>{children}</main>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile header */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-          <button onClick={() => setMobileOpen(true)} className="text-muted-foreground hover:text-foreground">
-            <Menu size={20} />
-          </button>
-          <div className="flex items-center gap-2">
-            <img src={nexaLogo} alt="Nexa" className="h-6 w-6 object-contain" />
-            <span className="text-sm font-bold text-primary tracking-widest">NEXA</span>
-          </div>
-          <div />
-        </div>
-
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
-      </div>
+      {/* Bottom Nav */}
+      <nav className="bottom-nav">
+        {navItems.map(item => {
+          const active = location === item.path || location.startsWith(item.path + "/");
+          return (
+            <Link key={item.path} href={item.path}>
+              <button className={`nav-item ${active ? "active" : ""}`}>
+                {item.icon(active)}
+                {item.label}
+                {active && <span className="nav-dot" />}
+              </button>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

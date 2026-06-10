@@ -1,101 +1,97 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { transactionsTable } from "@workspace/db";
-import { eq, desc, and, SQL } from "drizzle-orm";
-import { CreateTransactionBody, ListTransactionsQueryParams } from "@workspace/api-zod";
+import { transactionsTable, walletsTable } from "@workspace/db";
+import { eq, desc, and } from "drizzle-orm";
+import { requireAuth } from "../middleware/auth";
+import { NEXA_PRICE_USD } from "./auth";
 import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
 
-const NEXA_PRICE_USD = 0.0842;
+function formatTx(t: any) {
+  return {
+    id: t.id,
+    type: t.type,
+    amount: parseFloat(t.amount),
+    amountUsd: parseFloat(t.amountUsd),
+    amountEur: parseFloat(t.amount) * 100,
+    fromAddress: t.fromAddress,
+    toAddress: t.toAddress,
+    merchantName: t.merchantName,
+    status: t.status,
+    txHash: t.txHash,
+    createdAt: t.createdAt,
+  };
+}
 
-// GET /transactions
-router.get("/transactions", async (req, res) => {
+router.get("/transactions", requireAuth, async (req, res) => {
   try {
-    const parsed = ListTransactionsQueryParams.safeParse(req.query);
-    const limit = parsed.success ? (parsed.data.limit ?? 20) : 20;
-    const offset = parsed.success ? (parsed.data.offset ?? 0) : 0;
-    const type = parsed.success ? parsed.data.type : undefined;
+    const limit = parseInt(String(req.query.limit ?? 20));
+    const offset = parseInt(String(req.query.offset ?? 0));
+    const type = req.query.type as string | undefined;
+    const walletId = req.user!.walletId;
 
-    let query = db.select().from(transactionsTable).orderBy(desc(transactionsTable.createdAt));
+    const conditions: any[] = [eq(transactionsTable.walletId, walletId)];
+    if (type) conditions.push(eq(transactionsTable.type, type as any));
 
-    const rows = await (type
-      ? db.select().from(transactionsTable).where(eq(transactionsTable.type, type as any)).orderBy(desc(transactionsTable.createdAt)).limit(limit).offset(offset)
-      : db.select().from(transactionsTable).orderBy(desc(transactionsTable.createdAt)).limit(limit).offset(offset));
+    const rows = await db.select().from(transactionsTable)
+      .where(and(...conditions))
+      .orderBy(desc(transactionsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-    res.json(rows.map((t) => ({
-      id: t.id,
-      type: t.type,
-      amount: parseFloat(t.amount),
-      amountUsd: parseFloat(t.amountUsd),
-      fromAddress: t.fromAddress,
-      toAddress: t.toAddress,
-      merchantName: t.merchantName,
-      status: t.status,
-      txHash: t.txHash,
-      createdAt: t.createdAt,
-    })));
+    return res.json(rows.map(formatTx));
   } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// POST /transactions
-router.post("/transactions", async (req, res) => {
+router.post("/transactions", requireAuth, async (req, res) => {
   try {
-    const parsed = CreateTransactionBody.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "Invalid request body" });
+    const { toAddress, amount, memo } = req.body;
+    if (!toAddress || !amount || isNaN(parseFloat(amount))) {
+      return res.status(400).json({ error: "toAddress and amount are required" });
     }
-    const { toAddress, amount } = parsed.data;
-    const amountUsd = amount * NEXA_PRICE_USD;
-    const txHash = "0x" + Buffer.from(uuidv4()).toString("hex").substring(0, 40);
+    const numAmount = parseFloat(amount);
+    const walletId = req.user!.walletId;
 
+    const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
+    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
+
+    const current = parseFloat(wallet.balanceNexa);
+    if (current < numAmount) return res.status(400).json({ error: "Insufficient NEXA balance" });
+
+    await db.update(walletsTable).set({
+      balanceNexa: String((current - numAmount).toFixed(8)),
+    }).where(eq(walletsTable.id, walletId));
+
+    const txHash = "0x" + uuidv4().replace(/-/g, "").substring(0, 40);
     const [tx] = await db.insert(transactionsTable).values({
+      walletId,
       type: "send",
-      amount: String(amount),
-      amountUsd: String(amountUsd.toFixed(4)),
+      amount: String(numAmount),
+      amountUsd: String((numAmount * NEXA_PRICE_USD).toFixed(4)),
       toAddress,
+      fromAddress: wallet.address,
+      merchantName: memo ?? null,
       status: "confirmed",
       txHash,
     }).returning();
 
-    res.status(201).json({
-      id: tx.id,
-      type: tx.type,
-      amount: parseFloat(tx.amount),
-      amountUsd: parseFloat(tx.amountUsd),
-      fromAddress: tx.fromAddress,
-      toAddress: tx.toAddress,
-      merchantName: tx.merchantName,
-      status: tx.status,
-      txHash: tx.txHash,
-      createdAt: tx.createdAt,
-    });
+    return res.status(201).json(formatTx(tx));
   } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// GET /transactions/:id
-router.get("/transactions/:id", async (req, res) => {
+router.get("/transactions/:id", requireAuth, async (req, res) => {
   try {
-    const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, req.params.id));
-    if (!tx) return res.status(404).json({ error: "Transaction not found" });
-    res.json({
-      id: tx.id,
-      type: tx.type,
-      amount: parseFloat(tx.amount),
-      amountUsd: parseFloat(tx.amountUsd),
-      fromAddress: tx.fromAddress,
-      toAddress: tx.toAddress,
-      merchantName: tx.merchantName,
-      status: tx.status,
-      txHash: tx.txHash,
-      createdAt: tx.createdAt,
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
+    const [tx] = await db.select().from(transactionsTable)
+      .where(and(eq(transactionsTable.id, req.params.id), eq(transactionsTable.walletId, req.user!.walletId)));
+    if (!tx) return res.status(404).json({ error: "Not found" });
+    return res.json(formatTx(tx));
+  } catch {
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
