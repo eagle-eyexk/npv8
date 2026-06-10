@@ -1,21 +1,114 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>Nexa Payment Crypto</title>
-    <meta name="description" content="Nexa Payment Crypto — built on Replit. Update this description to reflect the app." />
+
+    <!-- Viewport — viewport-fit=cover handles iPhone notch + Dynamic Island -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+    <!-- Primary meta -->
+    <title>NEXA Pay — Tap. Pay. Instantly.</title>
+    <meta name="description" content="NEXA Pay — the EUR-stable crypto payment platform. Send, receive and tap-to-pay with 1 NEXA = €100." />
     <meta name="robots" content="index, follow" />
-    <meta property="og:title" content="Nexa Payment Crypto" />
-    <meta property="og:description" content="Nexa Payment Crypto — built on Replit. Update this description to reflect the app." />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Nexa Payment Crypto" />
-    <meta name="twitter:description" content="Nexa Payment Crypto — built on Replit. Update this description to reflect the app." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="keywords" content="NEXA, crypto, payment, EUR stable, wallet, tap to pay" />
+    <meta name="author" content="NEXA Pay" />
+
+    <!-- Theme colour — controls browser chrome on Android and PWA -->
+    <meta name="theme-color" content="#2563EB" />
+    <meta name="msapplication-TileColor" content="#2563EB" />
+    <meta name="msapplication-TileImage" content="icons/icon-144.png" />
+    <meta name="msapplication-config" content="browserconfig.xml" />
+
+    <!-- Open Graph -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:title"       content="NEXA Pay — Tap. Pay. Instantly." />
+    <meta property="og:description" content="The EUR-stable crypto wallet. 1 NEXA = €100. Phone mining, tap-to-pay, multi-crypto." />
+    <meta property="og:image"       content="icon-512.png" />
+    <meta property="og:url"         content="https://nexapay.app" />
+    <meta property="og:site_name"   content="NEXA Pay" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:title"       content="NEXA Pay — Tap. Pay. Instantly." />
+    <meta name="twitter:description" content="EUR-stable crypto payments. 1 NEXA = €100." />
+    <meta name="twitter:image"       content="icon-512.png" />
+
+    <!-- ── iOS Web App / Safari ─────────────────────────────────────── -->
+    <meta name="apple-mobile-web-app-capable"          content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title"            content="NEXA Pay" />
+    <meta name="format-detection"                      content="telephone=no" />
+
+    <!-- Apple touch icons (iOS uses the LARGEST icon that fits) -->
+    <link rel="apple-touch-icon"                    href="apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="57x57"      href="icons/icon-57.png" />
+    <link rel="apple-touch-icon" sizes="60x60"      href="icons/icon-60.png" />
+    <link rel="apple-touch-icon" sizes="72x72"      href="icons/icon-72.png" />
+    <link rel="apple-touch-icon" sizes="76x76"      href="icons/icon-76.png" />
+    <link rel="apple-touch-icon" sizes="114x114"    href="icons/icon-114.png" />
+    <link rel="apple-touch-icon" sizes="120x120"    href="icons/icon-120.png" />
+    <link rel="apple-touch-icon" sizes="144x144"    href="icons/icon-144.png" />
+    <link rel="apple-touch-icon" sizes="152x152"    href="icons/icon-152.png" />
+    <link rel="apple-touch-icon" sizes="167x167"    href="icons/icon-167.png" />
+    <link rel="apple-touch-icon" sizes="180x180"    href="icons/icon-180.png" />
+
+    <!-- iOS Splash Screens (covers all modern devices) -->
+    <!-- iPhone SE (640×1136) -->
+    <link rel="apple-touch-startup-image" media="(device-width:320px) and (device-height:568px) and (-webkit-device-pixel-ratio:2)"   href="splash.png" />
+    <!-- iPhone 8 / SE 2nd gen (750×1334) -->
+    <link rel="apple-touch-startup-image" media="(device-width:375px) and (device-height:667px) and (-webkit-device-pixel-ratio:2)"   href="splash.png" />
+    <!-- iPhone 8 Plus (1242×2208) -->
+    <link rel="apple-touch-startup-image" media="(device-width:414px) and (device-height:736px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPhone X / Xs (1125×2436) -->
+    <link rel="apple-touch-startup-image" media="(device-width:375px) and (device-height:812px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPhone Xs Max / 11 Pro Max (1242×2688) -->
+    <link rel="apple-touch-startup-image" media="(device-width:414px) and (device-height:896px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPhone 11 / Xr (828×1792) -->
+    <link rel="apple-touch-startup-image" media="(device-width:414px) and (device-height:896px) and (-webkit-device-pixel-ratio:2)"   href="splash.png" />
+    <!-- iPhone 12 / 13 / 14 (1170×2532) -->
+    <link rel="apple-touch-startup-image" media="(device-width:390px) and (device-height:844px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPhone 12 / 13 / 14 Pro Max (1284×2778) -->
+    <link rel="apple-touch-startup-image" media="(device-width:428px) and (device-height:926px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPhone 14 Pro (1179×2556) -->
+    <link rel="apple-touch-startup-image" media="(device-width:393px) and (device-height:852px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPhone 14 Pro Max (1290×2796) -->
+    <link rel="apple-touch-startup-image" media="(device-width:430px) and (device-height:932px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPhone 15 / 15 Pro (same as 14 Pro) -->
+    <link rel="apple-touch-startup-image" media="(device-width:393px) and (device-height:852px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPhone 15 Plus / 15 Pro Max (same as 14 Pro Max) -->
+    <link rel="apple-touch-startup-image" media="(device-width:430px) and (device-height:932px) and (-webkit-device-pixel-ratio:3)"   href="splash.png" />
+    <!-- iPad mini (768×1024) -->
+    <link rel="apple-touch-startup-image" media="(device-width:768px) and (device-height:1024px) and (-webkit-device-pixel-ratio:2)"  href="splash.png" />
+    <!-- iPad Air / 10.9" (820×1180) -->
+    <link rel="apple-touch-startup-image" media="(device-width:820px) and (device-height:1180px) and (-webkit-device-pixel-ratio:2)"  href="splash.png" />
+    <!-- iPad Pro 11" (834×1194) -->
+    <link rel="apple-touch-startup-image" media="(device-width:834px) and (device-height:1194px) and (-webkit-device-pixel-ratio:2)"  href="splash.png" />
+    <!-- iPad Pro 12.9" (1024×1366) -->
+    <link rel="apple-touch-startup-image" media="(device-width:1024px) and (device-height:1366px) and (-webkit-device-pixel-ratio:2)" href="splash.png" />
+
+    <!-- ── PWA Manifest ──────────────────────────────────────────────── -->
+    <link rel="manifest" href="manifest.json" />
+
+    <!-- Favicons -->
+    <link rel="icon"                  href="icons/icon-32.png" type="image/png" />
+    <link rel="icon" sizes="16x16"    href="icons/icon-16.png" type="image/png" />
+    <link rel="icon" sizes="32x32"    href="icons/icon-32.png" type="image/png" />
+    <link rel="shortcut icon"         href="icons/icon-32.png" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.com"    crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- iOS safe-area + standalone app fixes -->
+    <style>
+      html { background-color: #2563EB; }
+      body { background-color: #F1F5F9; }
+      /* Prevents scroll bounce / overscroll on iOS PWA */
+      html, body { overscroll-behavior: none; }
+      /* Notch / Dynamic Island padding */
+      body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    </style>
   </head>
   <body>
     <div id="root"></div>

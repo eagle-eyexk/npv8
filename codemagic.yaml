@@ -1,0 +1,186 @@
+workflows:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # NEXA Pay — iOS App Store distribution
+  # ─────────────────────────────────────────────────────────────────────────────
+  nexa-pay-ios-app-store:
+    name: "NEXA Pay — iOS App Store"
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+
+    environment:
+      node: 20.11.0
+      xcode: 15.4
+      # ── Codemagic variable groups (configure these in the dashboard) ─────────
+      #   app_store_connect  → APP_STORE_CONNECT_ISSUER_ID
+      #                        APP_STORE_CONNECT_KEY_IDENTIFIER
+      #                        APP_STORE_CONNECT_PRIVATE_KEY   (content of .p8)
+      #   ios_signing        → CERTIFICATE_PRIVATE_KEY         (RSA private key)
+      groups:
+        - app_store_connect
+        - ios_signing
+      vars:
+        BUNDLE_ID: com.nexapay.app
+        # ↓ Set this to your deployed backend URL before building
+        VITE_API_URL: "https://api.nexapay.app"
+        XCODE_WORKSPACE: artifacts/nexa-app/ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+
+    triggering:
+      events:
+        - push
+        - tag
+      branch_patterns:
+        - pattern: "main"
+          include: true
+          source: true
+      tag_patterns:
+        - pattern: "v*"
+          include: true
+
+    scripts:
+      # ── 1. Setup ─────────────────────────────────────────────────────────────
+      - name: Enable corepack / pnpm
+        script: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
+      - name: Install workspace dependencies
+        script: pnpm install --frozen-lockfile
+
+      # ── 2. Build the Vite web app (BASE_PATH=/ for Capacitor) ────────────────
+      - name: Build web app for Capacitor
+        script: |
+          cd artifacts/nexa-app
+          BASE_PATH=/ VITE_API_URL="$VITE_API_URL" pnpm run build:cap
+
+      # ── 3. Sync Capacitor (copies dist → ios/App/App/public) ─────────────────
+      - name: Capacitor sync
+        script: |
+          cd artifacts/nexa-app
+          npx cap sync ios
+
+      # ── 4. Resolve Swift Package Manager dependencies ────────────────────────
+      - name: Resolve Swift packages
+        script: |
+          cd artifacts/nexa-app/ios/App
+          xcodebuild -resolvePackageDependencies \
+            -project App.xcodeproj \
+            -scheme "$XCODE_SCHEME"
+
+      # ── 5. Code signing (Codemagic fetches profiles automatically) ───────────
+      - name: Set up code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+
+      # ── 6. Build IPA ──────────────────────────────────────────────────────────
+      - name: Build .ipa for App Store
+        script: |
+          xcode-project build-ipa \
+            --project "artifacts/nexa-app/ios/App/App.xcodeproj" \
+            --scheme "$XCODE_SCHEME"
+
+    # ── Artifacts ──────────────────────────────────────────────────────────────
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    # ── Publishing ─────────────────────────────────────────────────────────────
+    publishing:
+      email:
+        recipients:
+          - YOUR_EMAIL@example.com      # ← change to your address
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        api_key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key: $APP_STORE_CONNECT_PRIVATE_KEY
+        submit_to_testflight: true      # auto-publish to TestFlight
+        submit_to_app_store: false      # set true for direct App Store release
+
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # NEXA Pay — iOS TestFlight (PR preview builds)
+  # ─────────────────────────────────────────────────────────────────────────────
+  nexa-pay-ios-testflight:
+    name: "NEXA Pay — iOS TestFlight"
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    environment:
+      node: 20.11.0
+      xcode: 15.4
+      groups:
+        - app_store_connect
+        - ios_signing
+      vars:
+        BUNDLE_ID: com.nexapay.app
+        VITE_API_URL: "https://api.nexapay.app"
+        XCODE_SCHEME: App
+
+    triggering:
+      events:
+        - pull_request
+      branch_patterns:
+        - pattern: "develop"
+          include: true
+
+    scripts:
+      - name: Enable pnpm
+        script: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
+      - name: Install dependencies
+        script: pnpm install --frozen-lockfile
+
+      - name: Build web app
+        script: |
+          cd artifacts/nexa-app
+          BASE_PATH=/ VITE_API_URL="$VITE_API_URL" pnpm run build:cap
+
+      - name: Capacitor sync
+        script: |
+          cd artifacts/nexa-app
+          npx cap sync ios
+
+      - name: Resolve Swift packages
+        script: |
+          cd artifacts/nexa-app/ios/App
+          xcodebuild -resolvePackageDependencies \
+            -project App.xcodeproj \
+            -scheme "$XCODE_SCHEME"
+
+      - name: Set up code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Build .ipa
+        script: |
+          xcode-project build-ipa \
+            --project "artifacts/nexa-app/ios/App/App.xcodeproj" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      app_store_connect:
+        api_key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key: $APP_STORE_CONNECT_PRIVATE_KEY
+        submit_to_testflight: true
+        submit_to_app_store: false

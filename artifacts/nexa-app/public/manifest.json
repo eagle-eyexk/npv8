@@ -1,0 +1,61 @@
+{
+  "name": "NEXA Pay",
+  "short_name": "NEXA Pay",
+  "description": "Tap. Pay. Instantly. The EUR-stable crypto payment platform.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "theme_color": "#2563EB",
+  "background_color": "#FFFFFF",
+  "categories": ["finance", "payment"],
+  "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "icons/icon-48.png",  "sizes": "48x48",   "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-192.png",       "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png",       "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "NEXA Pay Wallet Dashboard"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Send NEXA",
+      "short_name": "Send",
+      "description": "Send NEXA to another wallet",
+      "url": "/send",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Receive NEXA",
+      "short_name": "Receive",
+      "description": "Receive NEXA to your wallet",
+      "url": "/receive",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Tap to Pay",
+      "short_name": "Pay",
+      "description": "Pay with tap-to-pay",
+      "url": "/tap",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ]
+}
